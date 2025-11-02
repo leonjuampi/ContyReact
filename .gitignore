@@ -1,0 +1,93 @@
+# ────────────────
+# 📦 Node / React
+# ────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ────────────────
+# ⚙️ Build / Output
+# ────────────────
+dist/
+build/
+coverage/
+.cache/
+.temp/
+.tmp/
+.vite/
+.eslintcache
+vite.config.ts.timestamp-*
+vite.config.js.timestamp-*
+
+# ────────────────
+# 🌍 Environment Files
+# ────────────────
+.env
+.env.*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ────────────────
+# 💻 IDEs y Editores
+# ────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ────────────────
+# 🧰 Sistema Operativo
+# ────────────────
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ────────────────
+# 🧪 Tests
+# ────────────────
+jest/
+jest-cache/
+coverage/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# ────────────────
+# 🚀 Deploy / Misc
+# ────────────────
+*.zip
+*.tar.gz
+*.tgz
+*.log
+*.bak
+*.tmp
+
+# ────────────────
+# 🧑‍💻 Optional según tu stack
+# ────────────────
+
+# Si usás TypeScript:
+*.tsbuildinfo
+
+# Si usás Next.js (por las dudas)
+.next/
+out/
+
+# Si usás Storybook
+storybook-static/
+.out/
+
+# Si usás Tailwind CSS JIT cache
+.tailwindcache/
