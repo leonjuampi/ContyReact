@@ -1,52 +1,57 @@
-
 import { useState, useEffect } from 'react';
 import Button from '../../../components/base/Button';
 import Card from '../../../components/base/Card';
-
-interface Customer {
-  id: string;
-  name: string;
-  document: string;
-  email: string;
-  phone: string;
-  taxCondition: string;
-  balance: number;
-  lastPurchase: string;
-  priceList: string;
-  tags: string[];
-  address: string;
-  notes: string;
-  status: 'active' | 'blocked';
-}
+import { Customer } from '../../services/customer.api'; // <-- Importamos la interfaz
 
 interface CustomerModalProps {
   customer?: Customer | null;
   onClose: () => void;
-  onSave: (customer: Omit<Customer, 'id' | 'balance' | 'lastPurchase'>) => void;
+  // La data que recibe onSave ahora coincide con el formulario
+  onSave: (customer: Omit<Customer, 'id' | 'balance' | 'lastPurchaseAt' | 'priceListName'>) => void;
 }
 
+// Mapeo Frontend
 const taxConditions = [
-  'Responsable Inscripto',
   'Consumidor Final',
+  'Responsable Inscripto',
   'Monotributista',
   'Exento'
 ];
 
+// Mapeo Frontend (Temporal)
+// TODO: Recibir esto como 'prop' desde la página principal
 const priceLists = [
-  'General',
-  'Minorista',
-  'Mayorista',
-  'Mayorista Plus'
+  { id: 1, name: 'General' },
+  { id: 2, name: 'Minorista' },
+  { id: 3, name: 'Mayorista' },
+  { id: 4, name: 'Mayorista Plus' }
 ];
 
+// Mapeo Inverso (Backend -> Frontend)
+const taxConditionDisplayMap: Record<string, string> = {
+  'RI': 'Responsable Inscripto',
+  'CF': 'Consumidor Final',
+  'MT': 'Monotributista',
+  'EX': 'Exento'
+};
+const priceListNameMap: Record<number, string> = {
+  1: 'General',
+  2: 'Minorista',
+  3: 'Mayorista',
+  4: 'Mayorista Plus'
+};
+
+
 export default function CustomerModal({ customer, onClose, onSave }: CustomerModalProps) {
+  
+  // El estado del formulario ahora coincide con el frontend
   const [formData, setFormData] = useState({
     name: '',
-    document: '',
+    document: '', // <-- Usamos 'document' en el form
     email: '',
     phone: '',
     taxCondition: 'Consumidor Final',
-    priceList: 'General',
+    priceList: 'General', // <-- Usamos el 'name' en el form
     tags: [] as string[],
     address: '',
     notes: '',
@@ -61,15 +66,15 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
     if (customer) {
       setFormData({
         name: customer.name,
-        document: customer.document,
-        email: customer.email,
-        phone: customer.phone,
-        taxCondition: customer.taxCondition,
-        priceList: customer.priceList,
-        tags: customer.tags,
-        address: customer.address,
-        notes: customer.notes,
-        status: customer.status
+        document: customer.taxId, // taxId (API) -> document (Form)
+        email: customer.email || '',
+        phone: customer.phone || '',
+        taxCondition: taxConditionDisplayMap[customer.taxCondition] || 'Consumidor Final', // RI -> Responsable Inscripto
+        priceList: customer.priceListName || priceListNameMap[customer.priceListId] || 'General', // 1 -> General
+        tags: customer.tags || [],
+        address: customer.address || '',
+        notes: customer.notes || '',
+        status: customer.status.toLowerCase() as 'active' | 'blocked' // ACTIVE -> active
       });
     }
   }, [customer]);
@@ -78,7 +83,7 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
-      } else if (e.ctrlKey && e.key === 's') {
+      } else if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         handleSubmit();
       }
@@ -86,7 +91,7 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [formData]); // <-- Añadido formData para que 'handleSubmit' tenga los datos actualizados
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -98,7 +103,6 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
     if (!formData.document.trim()) {
       newErrors.document = 'El CUIT/DNI es obligatorio';
     } else {
-      // Validación básica de formato CUIT/DNI
       const cleanDoc = formData.document.replace(/[-\s]/g, '');
       if (cleanDoc.length < 8) {
         newErrors.document = 'Formato de documento inválido';
@@ -109,6 +113,7 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
       newErrors.email = 'Email inválido';
     }
 
+    // El teléfono ya no es obligatorio en el backend, pero sí en tu mock. Lo dejamos.
     if (!formData.phone.trim()) {
       newErrors.phone = 'El teléfono es obligatorio';
     }
@@ -125,7 +130,6 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     
-    // Limpiar error del campo cuando el usuario empiece a escribir
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
@@ -155,14 +159,14 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
 
     setIsSubmitting(true);
     
+    // onSave ahora es async, así que podemos 'await'
     try {
-      // Simular delay de guardado
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      onSave(formData);
-      onClose();
+      // El 'onSave' de la página principal hace el mapeo y la llamada API
+      await onSave(formData); 
+      // El 'onClose' se llama desde la página principal si onSave tiene éxito
     } catch (error) {
-      console.error('Error al guardar cliente:', error);
+      // El error ya se muestra en el Toast de la página principal
+      console.error('Error en handleSubmit (modal)', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -170,7 +174,7 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-bold text-black dark:text-white">
@@ -184,8 +188,8 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
           </button>
         </div>
 
-        {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(90vh-140px)]">
+        {/* Content (con overflow) */}
+        <div className="overflow-y-auto flex-1">
           <div className="p-6 space-y-6">
             {/* Información básica */}
             <Card>
@@ -295,8 +299,9 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
                     onChange={(e) => handleInputChange('priceList', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white text-sm pr-8"
                   >
+                    {/* TODO: Cargar esto desde la API */}
                     {priceLists.map(list => (
-                      <option key={list} value={list}>{list}</option>
+                      <option key={list.id} value={list.name}>{list.name}</option>
                     ))}
                   </select>
                 </div>
