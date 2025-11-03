@@ -1,7 +1,5 @@
-
+// 1. Imports eliminados: Sidebar, TopBar
 import { useState, useEffect } from 'react';
-import Sidebar from '../../components/feature/Sidebar';
-import TopBar from '../../components/feature/TopBar';
 import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
 import ProductModal from './components/ProductModal';
@@ -24,6 +22,7 @@ interface Product {
 }
 
 const mockProducts: Product[] = [
+  // ... (tus datos mock no cambian)
   {
     id: '1',
     sku: 'CAM001',
@@ -104,7 +103,7 @@ export default function ProductsPage() {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [showBulkActions, setShowBulkActions] = useState(false);
+  // const [showBulkActions, setShowBulkActions] = useState(false); // Esta variable no se usa, la comentamos
   const [showImportModal, setShowImportModal] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
@@ -199,7 +198,7 @@ export default function ProductsPage() {
 
   const handleBulkArchive = () => {
     setProducts(products.map(p => 
-      selectedProducts.includes(p.id) ? { ...p, status: 'archive' as const } : p
+      selectedProducts.includes(p.id) ? { ...p, status: 'archived' as const } : p // Corregido: 'archive' a 'archived'
     ));
     setSelectedProducts([]);
   };
@@ -209,7 +208,13 @@ export default function ProductsPage() {
   };
 
   const handleImportProducts = (importedProducts: Product[]) => {
-    setProducts([...products, ...importedProducts]);
+    // Aquí deberías castear 'any[]' a 'Product[]' o asegurar que onImport devuelva 'Product[]'
+    const newProducts = importedProducts.map(p => ({
+      ...p,
+      id: p.id || Date.now().toString(),
+      lowStock: p.stock <= (p.minStock || 10)
+    })) as Product[];
+    setProducts([...products, ...newProducts]);
     setShowImportModal(false);
     showToast(`Se importaron ${importedProducts.length} productos exitosamente`, 'success');
   };
@@ -267,244 +272,241 @@ export default function ProductsPage() {
     );
   };
 
+  // 3. JSX modificado: Eliminamos wrappers, Sidebar y TopBar.
+  //    Usamos un Fragment (<>) para devolver el contenido y los modales.
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <Sidebar activeItem="products" onItemClick={() => {}} />
-      <div className="ml-64">
-        <TopBar />
-        
-        <div className="p-6">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-black dark:text-white mb-2">Productos</h1>
-            <p className="text-gray-600 dark:text-gray-400">Gestiona tu catálogo de productos</p>
-          </div>
+    <>
+      <div className="p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-black dark:text-white mb-2">Productos</h1>
+          <p className="text-gray-600 dark:text-gray-400">Gestiona tu catálogo de productos</p>
+        </div>
 
-          <Card className="mb-6">
-            <div className="flex flex-col lg:flex-row gap-4">
-              {/* Buscador */}
-              <div className="flex-1">
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i className="ri-search-line text-gray-400"></i>
-                  </div>
-                  <input
-                    id="product-search"
-                    type="text"
-                    placeholder="Buscar por SKU, nombre o código... (Tecla /)"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white placeholder-gray-500 focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent"
-                  />
+        <Card className="mb-6">
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Buscador */}
+            <div className="flex-1">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <i className="ri-search-line text-gray-400"></i>
                 </div>
-              </div>
-
-              {/* Filtros */}
-              <div className="flex gap-3">
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
-                >
-                  {categories.map(category => (
-                    <option key={category} value={category}>{category}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
-                >
-                  {statusOptions.map(status => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
-
-                <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showLowStock}
-                    onChange={(e) => setShowLowStock(e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-sm text-black dark:text-white whitespace-nowrap">Stock bajo</span>
-                </label>
-              </div>
-
-              {/* Botones de acción */}
-              <div className="flex gap-2">
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    setEditingProduct(null);
-                    setShowProductModal(true);
-                  }}
-                >
-                  <i className="ri-add-line mr-2"></i>
-                  Nuevo (N)
-                </Button>
-                <Button variant="outline" onClick={handleImport}>
-                  <i className="ri-upload-line mr-2"></i>
-                  Importar CSV
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={handlePrintLabels}
-                  disabled={selectedProducts.length === 0}
-                >
-                  <i className="ri-printer-line mr-2"></i>
-                  Etiquetas
-                </Button>
+                <input
+                  id="product-search"
+                  type="text"
+                  placeholder="Buscar por SKU, nombre o código... (Tecla /)"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white placeholder-gray-500 focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent"
+                />
               </div>
             </div>
-          </Card>
 
-          {/* Bulk Actions */}
-          {selectedProducts.length > 0 && (
-            <BulkActions
-              selectedCount={selectedProducts.length}
-              onActivate={() => console.log('Activar productos')}
-              onDeactivate={() => console.log('Desactivar productos')}
-              onChangePrice={() => console.log('Cambiar precios')}
-              onAssignCategory={() => console.log('Asignar categoría')}
-              onArchive={handleBulkArchive}
-              onClear={() => setSelectedProducts([])}
-            />
-          )}
+            {/* Filtros */}
+            <div className="flex gap-3">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
+              >
+                {categories.map(category => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
 
-          {/* Tabla de productos */}
-          <Card padding="sm">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left py-3 px-4 w-12">
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
+              >
+                {statusOptions.map(status => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+
+              <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showLowStock}
+                  onChange={(e) => setShowLowStock(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm text-black dark:text-white whitespace-nowrap">Stock bajo</span>
+              </label>
+            </div>
+
+            {/* Botones de acción */}
+            <div className="flex gap-2">
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setEditingProduct(null);
+                  setShowProductModal(true);
+                }}
+              >
+                <i className="ri-add-line mr-2"></i>
+                Nuevo (N)
+              </Button>
+              <Button variant="outline" onClick={handleImport}>
+                <i className="ri-upload-line mr-2"></i>
+                Importar CSV
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handlePrintLabels}
+                disabled={selectedProducts.length === 0}
+              >
+                <i className="ri-printer-line mr-2"></i>
+                Etiquetas
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* Bulk Actions */}
+        {selectedProducts.length > 0 && (
+          <BulkActions
+            selectedCount={selectedProducts.length}
+            onActivate={() => console.log('Activar productos')}
+            onDeactivate={() => console.log('Desactivar productos')}
+            onChangePrice={() => console.log('Cambiar precios')}
+            onAssignCategory={() => console.log('Asignar categoría')}
+            onArchive={handleBulkArchive}
+            onClear={() => setSelectedProducts([])}
+          />
+        )}
+
+        {/* Tabla de productos */}
+        <Card padding="sm">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 w-12">
+                    <input
+                      type="checkbox"
+                      checked={selectedProducts.length === filteredProducts.length && filteredProducts.length > 0}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="rounded"
+                    />
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Imagen</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">SKU</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Nombre</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Categoría</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Precio</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Costo</th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Stock</th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Estado</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Margen %</th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((product) => (
+                  <tr
+                    key={product.id}
+                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50"
+                  >
+                    <td className="py-3 px-4">
                       <input
                         type="checkbox"
-                        checked={selectedProducts.length === filteredProducts.length && filteredProducts.length > 0}
-                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        checked={selectedProducts.includes(product.id)}
+                        onChange={(e) => handleSelectProduct(product.id, e.target.checked)}
                         className="rounded"
                       />
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Imagen</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">SKU</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Nombre</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Categoría</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Precio</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Costo</th>
-                    <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Stock</th>
-                    <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Estado</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Margen %</th>
-                    <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProducts.map((product) => (
-                    <tr
-                      key={product.id}
-                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50"
-                    >
-                      <td className="py-3 px-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedProducts.includes(product.id)}
-                          onChange={(e) => handleSelectProduct(product.id, e.target.checked)}
-                          className="rounded"
-                        />
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
-                          {product.image ? (
-                            <img
-                              src={product.image}
-                              alt={product.name}
-                              className="w-full h-full object-cover object-top"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <i className="ri-image-line text-gray-400"></i>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="font-mono text-sm text-black dark:text-white">{product.sku}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-black dark:text-white font-medium">{product.name}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-gray-600 dark:text-gray-400">{product.category}</span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className="font-medium text-black dark:text-white">{formatPrice(product.price)}</span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className="text-gray-600 dark:text-gray-400">{formatPrice(product.cost)}</span>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <span className={`font-medium ${product.lowStock ? 'text-red-600 dark:text-red-400' : 'text-black dark:text-white'}`}>
-                          {product.stock}
-                        </span>
-                        {product.lowStock && (
-                          <div className="w-2 h-2 bg-red-500 rounded-full mt-1 mx-auto"></div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
+                        {product.image ? (
+                          <img
+                            src={product.image}
+                            alt={product.name}
+                            className="w-full h-full object-cover object-top"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <i className="ri-image-line text-gray-400"></i>
+                          </div>
                         )}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {getStatusBadge(product.status)}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className="text-green-600 dark:text-green-400 font-medium">
-                          {product.margin.toFixed(1)}%
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => handleEdit(product)}
-                            className="p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
-                            title="Editar (E)"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            onClick={() => handleDuplicate(product)}
-                            className="p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
-                            title="Duplicar"
-                          >
-                            <i className="ri-file-copy-line"></i>
-                          </button>
-                          <button
-                            onClick={() => handleArchive(product.id)}
-                            className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
-                            title="Archivar (Del)"
-                          >
-                            <i className="ri-archive-line"></i>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {filteredProducts.length === 0 && (
-              <div className="text-center py-8">
-                <i className="ri-box-3-line text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
-                <p className="text-gray-500 dark:text-gray-400">No se encontraron productos</p>
-              </div>
-            )}
-          </Card>
-
-          {/* Atajos de teclado */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Atajos: <span className="font-mono">/ Buscar</span> • <span className="font-mono">N Nuevo</span> • 
-              <span className="font-mono">E Editar</span> • <span className="font-mono">Del Archivar</span> • 
-              <span className="font-mono">Ctrl+I Importar</span>
-            </p>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-mono text-sm text-black dark:text-white">{product.sku}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-black dark:text-white font-medium">{product.name}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-gray-600 dark:text-gray-400">{product.category}</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <span className="font-medium text-black dark:text-white">{formatPrice(product.price)}</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <span className="text-gray-600 dark:text-gray-400">{formatPrice(product.cost)}</span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span className={`font-medium ${product.lowStock ? 'text-red-600 dark:text-red-400' : 'text-black dark:text-white'}`}>
+                        {product.stock}
+                      </span>
+                      {product.lowStock && (
+                        <div className="w-2 h-2 bg-red-500 rounded-full mt-1 mx-auto"></div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {getStatusBadge(product.status)}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <span className="text-green-600 dark:text-green-400 font-medium">
+                        {product.margin.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleEdit(product)}
+                          className="p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
+                          title="Editar (E)"
+                        >
+                          <i className="ri-edit-line"></i>
+                        </button>
+                        <button
+                          onClick={() => handleDuplicate(product)}
+                          className="p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
+                          title="Duplicar"
+                        >
+                          <i className="ri-file-copy-line"></i>
+                        </button>
+                        <button
+                          onClick={() => handleArchive(product.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+                          title="Archivar (Del)"
+                        >
+                          <i className="ri-archive-line"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+
+          {filteredProducts.length === 0 && (
+            <div className="text-center py-8">
+              <i className="ri-box-3-line text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+              <p className="text-gray-500 dark:text-gray-400">No se encontraron productos</p>
+            </div>
+          )}
+        </Card>
+
+        {/* Atajos de teclado */}
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Atajos: <span className="font-mono">/ Buscar</span> • <span className="font-mono">N Nuevo</span> • 
+            <span className="font-mono">E Editar</span> • <span className="font-mono">Del Archivar</span> • 
+            <span className="font-mono">Ctrl+I Importar</span>
+          </p>
         </div>
       </div>
 
@@ -525,9 +527,9 @@ export default function ProductsPage() {
               const newProduct = {
                 ...productData,
                 id: Date.now().toString(),
-                lowStock: productData.stock <= 10
+                lowStock: productData.stock <= (productData.minStock || 10) // <-- Lógica mejorada
               };
-              setProducts([...products, newProduct]);
+              setProducts([...products, newProduct as Product]);
             }
             setShowProductModal(false);
             setEditingProduct(null);
@@ -557,7 +559,7 @@ export default function ProductsPage() {
         <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
           toast.type === 'success' ? 'bg-green-500 text-white' :
           toast.type === 'error' ? 'bg-red-500 text-white' :
-          'bg-blue-5 00 text-white'
+          'bg-blue-500 text-white' // Corregido: 'bg-blue-5 00' a 'bg-blue-500'
         }`}>
           <div className="flex items-center space-x-2">
             <i className={`${
@@ -569,6 +571,6 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

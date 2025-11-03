@@ -1,13 +1,15 @@
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/base/Button';
 import Card from '../../components/base/Card';
+import { useAuth } from '../../contexts/AuthContext'; // <-- Lógica de Auth
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth(); // <-- Lógica de Auth
+
   const [formData, setFormData] = useState({
-    email: '',
+    username: '', // <-- Campo 'username' para el backend
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -17,23 +19,22 @@ export default function Login() {
   const [generalError, setGeneralError] = useState('');
   const [showToast, setShowToast] = useState(false);
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+  // Validación para 'username'
+  const validateUsername = (username: string) => {
+    return username.trim().length > 0;
   };
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
 
-    // Validación en tiempo real
-    if (field === 'email' && value) {
-      if (!validateEmail(value)) {
+    if (field === 'username') {
+      if (!validateUsername(value)) {
         setErrors((prev) => ({
           ...prev,
-          email: 'Por favor ingresa un email válido',
+          username: 'El usuario es requerido',
         }));
       } else {
-        setErrors((prev) => ({ ...prev, email: '' }));
+        setErrors((prev) => ({ ...prev, username: '' }));
       }
     }
 
@@ -51,10 +52,10 @@ export default function Login() {
 
   const isFormValid = () => {
     return (
-      formData.email &&
+      formData.username &&
       formData.password &&
-      validateEmail(formData.email) &&
-      !errors.email &&
+      validateUsername(formData.username) &&
+      !errors.username &&
       !errors.password
     );
   };
@@ -67,21 +68,27 @@ export default function Login() {
     setGeneralError('');
 
     try {
-      // Simular llamada a API
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // --- CONEXIÓN AL BACKEND ---
+      // Asegúrate de que tu backend esté corriendo y sea accesible
+      // Si corre en otro puerto (ej. 3001), necesitarás configurar un proxy en Vite
+      // o usar la URL completa (ej. 'http://localhost:3001/api/auth/login')
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData), // Envía { username, password }
+      });
 
-      // Simular error de credenciales
-      if (
-        formData.email !== 'admin@conty.com' ||
-        formData.password !== 'admin123'
-      ) {
-        throw new Error('Usuario o contraseña incorrectos');
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Usuario o contraseña incorrectos');
       }
 
-      // Login exitoso
-      navigate('/');
+      // Login exitoso: guardamos en el contexto
+      login(data.token, data.user);
+      navigate('/'); // Redirigimos al dashboard
+
     } catch (error) {
-      // Manejo de error robusto
       const message =
         error instanceof Error
           ? error.message
@@ -102,6 +109,7 @@ export default function Login() {
     console.log('Recuperar contraseña');
   };
 
+  // --- ❗️ ESTE ES EL JSX ORIGINAL QUE DEBE ESTAR ---
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
       {/* Toast de error */}
@@ -134,35 +142,35 @@ export default function Login() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Campo Email */}
+              {/* Campo Usuario (Modificado de 'email' a 'username') */}
               <div>
                 <label
-                  htmlFor="email"
+                  htmlFor="username"
                   className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                 >
-                  Email o Usuario
+                  Usuario
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i className="ri-mail-line text-gray-400 text-sm"></i>
+                    <i className="ri-user-line text-gray-400 text-sm"></i>
                   </div>
                   <input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    id="username"
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) => handleInputChange('username', e.target.value)}
                     className="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent text-sm"
-                    placeholder="tu@email.com"
-                    aria-describedby={errors.email ? 'email-error' : undefined}
+                    placeholder="tu_usuario"
+                    aria-describedby={errors.username ? 'username-error' : undefined}
                   />
                 </div>
-                {errors.email && (
+                {errors.username && (
                   <p
-                    id="email-error"
+                    id="username-error"
                     className="mt-2 text-sm text-red-600 dark:text-red-400"
                     role="alert"
                   >
-                    {errors.email}
+                    {errors.username}
                   </p>
                 )}
               </div>

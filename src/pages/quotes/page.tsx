@@ -1,7 +1,6 @@
-
 import { useState, useEffect, useRef } from 'react';
-import Sidebar from '../../components/feature/Sidebar';
-import TopBar from '../../components/feature/TopBar';
+// import Sidebar from '../../components/feature/Sidebar'; // <--- ELIMINADO
+// import TopBar from '../../components/feature/TopBar'; // <--- ELIMINADO
 import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
 import QuoteEditor from './components/QuoteEditor';
@@ -47,6 +46,7 @@ interface TimelineEvent {
 }
 
 const mockQuotes: Quote[] = [
+  // ... (tus datos mock no cambian)
   {
     id: '1',
     number: 'PRES-2024-001',
@@ -101,6 +101,7 @@ const mockQuotes: Quote[] = [
 ];
 
 const statusTabs = [
+  // ... (tus datos de tabs no cambian)
   { id: 'all', label: 'Todos', color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200' },
   { id: 'draft', label: 'Borrador', color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400' },
   { id: 'sent', label: 'Enviado', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400' },
@@ -240,160 +241,154 @@ export default function QuotesPage() {
     );
   }
 
+  // 3. JSX modificado: Se quitan los wrappers, Sidebar y TopBar.
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <Sidebar activeItem="quotes" onItemClick={() => {}} />
-      <div className="ml-64">
-        <TopBar />
-        
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-2xl font-bold text-black dark:text-white mb-2">Presupuestos</h1>
-              <p className="text-gray-600 dark:text-gray-400">Gestiona cotizaciones y propuestas comerciales</p>
-            </div>
-            <Button onClick={handleNewQuote}>
-              <i className="ri-add-line mr-2"></i>
-              Nuevo Presupuesto (N)
-            </Button>
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-black dark:text-white mb-2">Presupuestos</h1>
+          <p className="text-gray-600 dark:text-gray-400">Gestiona cotizaciones y propuestas comerciales</p>
+        </div>
+        <Button onClick={handleNewQuote}>
+          <i className="ri-add-line mr-2"></i>
+          Nuevo Presupuesto (N)
+        </Button>
+      </div>
+
+      {/* Tabs de estado */}
+      <Card className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex space-x-1">
+            {statusTabs.map(tab => {
+              const count = tab.id === 'all' ? quotes.length : quotes.filter(q => q.status === tab.id).length;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer ${
+                    activeTab === tab.id
+                      ? 'bg-black dark:bg-white text-white dark:text-black'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  {tab.label} ({count})
+                </button>
+              );
+            })}
           </div>
-
-          {/* Tabs de estado */}
-          <Card className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex space-x-1">
-                {statusTabs.map(tab => {
-                  const count = tab.id === 'all' ? quotes.length : quotes.filter(q => q.status === tab.id).length;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer ${
-                        activeTab === tab.id
-                          ? 'bg-black dark:bg-white text-white dark:text-black'
-                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                      }`}
-                    >
-                      {tab.label} ({count})
-                    </button>
-                  );
-                })}
+          
+          <div className="flex items-center space-x-3">
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <i className="ri-search-line text-gray-400"></i>
               </div>
-              
-              <div className="flex items-center space-x-3">
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i className="ri-search-line text-gray-400"></i>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Buscar presupuestos..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white placeholder-gray-500 text-sm"
-                  />
-                </div>
-              </div>
+              <input
+                type="text"
+                placeholder="Buscar presupuestos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white placeholder-gray-500 text-sm"
+              />
             </div>
-          </Card>
-
-          {/* Lista de presupuestos */}
-          <Card padding="sm">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">N°</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Cliente</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Total</th>
-                    <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Validez</th>
-                    <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Estado</th>
-                    <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredQuotes.map((quote) => (
-                    <tr
-                      key={quote.id}
-                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50"
-                    >
-                      <td className="py-3 px-4">
-                        <span className="font-mono text-sm text-black dark:text-white">{quote.number}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div>
-                          <p className="font-medium text-black dark:text-white">{quote.client.name}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{quote.client.email}</p>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className="font-medium text-black dark:text-white">{formatPrice(quote.total)}</span>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <div className="text-sm">
-                          <p className={`${isExpired(quote.validUntil) ? 'text-red-600 dark:text-red-400' : 'text-black dark:text-white'}`}>
-                            {new Date(quote.validUntil).toLocaleDateString('es-AR')}
-                          </p>
-                          {isExpired(quote.validUntil) && (
-                            <p className="text-xs text-red-500">Vencido</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {getStatusBadge(quote.status)}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => handleEditQuote(quote)}
-                            className="p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
-                            title="Ver / Editar"
-                          >
-                            <i className="ri-eye-line"></i>
-                          </button>
-                          <button
-                            onClick={() => handleDuplicate(quote)}
-                            className="p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
-                            title="Duplicar"
-                          >
-                            <i className="ri-file-copy-line"></i>
-                          </button>
-                          {quote.status !== 'converted' && quote.status !== 'expired' && (
-                            <button
-                              onClick={() => handleCancel(quote.id)}
-                              className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
-                              title="Cancelar"
-                            >
-                              <i className="ri-close-circle-line"></i>
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {filteredQuotes.length === 0 && (
-              <div className="text-center py-8">
-                <i className="ri-file-text-line text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
-                <p className="text-gray-500 dark:text-gray-400">No se encontraron presupuestos</p>
-                <Button onClick={handleNewQuote} className="mt-4">
-                  Crear primer presupuesto
-                </Button>
-              </div>
-            )}
-          </Card>
-
-          {/* Atajos de teclado */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Atajos: <span className="font-mono">N Nuevo</span> • <span className="font-mono">Ctrl+Enter Enviar</span> • 
-              <span className="font-mono">Ctrl+D PDF</span>
-            </p>
           </div>
         </div>
+      </Card>
+
+      {/* Lista de presupuestos */}
+      <Card padding="sm">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">N°</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Cliente</th>
+                <th className="text-right py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Total</th>
+                <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Validez</th>
+                <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Estado</th>
+                <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredQuotes.map((quote) => (
+                <tr
+                  key={quote.id}
+                  className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50"
+                >
+                  <td className="py-3 px-4">
+                    <span className="font-mono text-sm text-black dark:text-white">{quote.number}</span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div>
+                      <p className="font-medium text-black dark:text-white">{quote.client.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{quote.client.email}</p>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <span className="font-medium text-black dark:text-white">{formatPrice(quote.total)}</span>
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <div className="text-sm">
+                      <p className={`${isExpired(quote.validUntil) ? 'text-red-600 dark:text-red-400' : 'text-black dark:text-white'}`}>
+                        {new Date(quote.validUntil).toLocaleDateString('es-AR')}
+                      </p>
+                      {isExpired(quote.validUntil) && (
+                        <p className="text-xs text-red-500">Vencido</p>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    {getStatusBadge(quote.status)}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => handleEditQuote(quote)}
+                        className="p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
+                        title="Ver / Editar"
+                      >
+                        <i className="ri-eye-line"></i>
+                      </button>
+                      <button
+                        onClick={() => handleDuplicate(quote)}
+                        className="p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
+                        title="Duplicar"
+                      >
+                        <i className="ri-file-copy-line"></i>
+                      </button>
+                      {quote.status !== 'converted' && quote.status !== 'expired' && (
+                        <button
+                          onClick={() => handleCancel(quote.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+                          title="Cancelar"
+                        >
+                          <i className="ri-close-circle-line"></i>
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredQuotes.length === 0 && (
+          <div className="text-center py-8">
+            <i className="ri-file-text-line text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+            <p className="text-gray-500 dark:text-gray-400">No se encontraron presupuestos</p>
+            <Button onClick={handleNewQuote} className="mt-4">
+              Crear primer presupuesto
+            </Button>
+          </div>
+        )}
+      </Card>
+
+      {/* Atajos de teclado */}
+      <div className="mt-6 text-center">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Atajos: <span className="font-mono">N Nuevo</span> • <span className="font-mono">Ctrl+Enter Enviar</span> • 
+          <span className="font-mono">Ctrl+D PDF</span>
+        </p>
       </div>
     </div>
   );

@@ -1,13 +1,10 @@
-
+// 1. Imports eliminados: Sidebar, TopBar, useTheme
 import { useState, useEffect } from 'react';
-import Sidebar from '../../components/feature/Sidebar';
-import TopBar from '../../components/feature/TopBar';
 import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
 import CustomerDetail from './components/CustomerDetail';
 import CustomerModal from './components/CustomerModal';
 import ImportCSVModal from './components/ImportCSVModal';
-import { useTheme } from '../../contexts/ThemeContext';
 
 interface Customer {
   id: string;
@@ -26,6 +23,7 @@ interface Customer {
 }
 
 const mockCustomers: Customer[] = [
+  // ... (tus datos mock no cambian)
   {
     id: '1',
     name: 'María Elena Rodríguez',
@@ -119,7 +117,7 @@ export default function CustomersPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const { isDarkMode } = useTheme();
+  // 2. Hook eliminado: useTheme
 
   useEffect(() => {
     let filtered = customers;
@@ -288,223 +286,220 @@ export default function CustomersPage() {
     );
   };
 
+  // 3. JSX modificado: Eliminamos los wrappers, Sidebar y TopBar.
+  //    Usamos un Fragment (<>) para devolver el contenido y los modales.
   return (
-    <div className={`min-h-screen bg-gray-50 dark:bg-gray-950 ${isDarkMode ? 'dark' : ''}`}>
-      <Sidebar activeItem="customers" onItemClick={() => {}} />
-      <div className="ml-64">
-        <TopBar title="Clientes" />
+    <>
+      <div className="p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-black dark:text-white mb-2">Clientes</h1>
+          <p className="text-gray-600 dark:text-gray-400">Gestiona tu base de clientes</p>
+        </div>
 
-        <div className="p-6">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-black dark:text-white mb-2">Clientes</h1>
-            <p className="text-gray-600 dark:text-gray-400">Gestiona tu base de clientes</p>
-          </div>
-
-          <Card className="mb-6">
-            <div className="flex flex-col lg:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i className="ri-search-line text-gray-400"></i>
-                  </div>
-                  <input
-                    id="customer-search"
-                    type="text"
-                    placeholder="Buscar por nombre, CUIT/DNI, email o teléfono... (Tecla /)"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white placeholder-gray-500 focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent"
-                  />
+        <Card className="mb-6">
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <i className="ri-search-line text-gray-400"></i>
                 </div>
-              </div>
-
-              <div className="flex gap-3">
-                <select
-                  value={selectedTaxCondition}
-                  onChange={e => setSelectedTaxCondition(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
-                >
-                  {taxConditions.map(condition => (
-                    <option key={condition} value={condition}>
-                      {condition}
-                    </option>
-                  ))}
-                </select>
-
-                <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showWithDebt}
-                    onChange={e => setShowWithDebt(e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-sm text-black dark:text-white whitespace-nowrap">Con deuda</span>
-                </label>
-
-                <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showNoRecentPurchases}
-                    onChange={e => setShowNoRecentPurchases(e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-sm text-black dark:text-white whitespace-nowrap">Sin compras 90d</span>
-                </label>
-              </div>
-
-              <div className="flex gap-2">
-                <Button variant="primary" onClick={handleNewCustomer}>
-                  <i className="ri-add-line mr-2"></i>
-                  Nuevo (N)
-                </Button>
-                <Button variant="outline" onClick={handleImportCSV}>
-                  <i className="ri-upload-line mr-2"></i>
-                  Importar CSV
-                </Button>
+                <input
+                  id="customer-search"
+                  type="text"
+                  placeholder="Buscar por nombre, CUIT/DNI, email o teléfono... (Tecla /)"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white placeholder-gray-500 focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent"
+                />
               </div>
             </div>
-          </Card>
 
-          <Card padding="sm">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Nombre
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-                      CUIT/DNI
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Email
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Teléfono
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Condición IVA
-                    </th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Saldo/Deuda
-                    </th>
-                    <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Última compra
-                    </th>
-                    <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Lista de precios
-                    </th>
-                    <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCustomers.map(customer => (
-                    <tr
-                      key={customer.id}
-                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50 cursor-pointer"
-                      onClick={() => handleCustomerClick(customer)}
-                    >
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
-                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                              {customer.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <div>
-                            <div className="font-medium text-black dark:text-white">{customer.name}</div>
-                            <div className="flex gap-1 mt-1">
-                              {customer.tags.map(tag => (
-                                <span
-                                  key={tag}
-                                  className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="font-mono text-sm text-black dark:text-white">{customer.document}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-gray-600 dark:text-gray-400">{customer.email}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-gray-600 dark:text-gray-400">{customer.phone}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-black dark:text-white">{customer.taxCondition}</span>
-                      </td>
-                      <td className="py-3 px-4 text-right">{getBalanceBadge(customer.balance)}</td>
-                      <td className="py-3 px-4 text-center">
-                        <span className="text-gray-600 dark:text-gray-400">{formatDate(customer.lastPurchase)}</span>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <span className="text-black dark:text-white">{customer.priceList}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              handleCreateSale(customer.id);
-                            }}
-                            className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors cursor-pointer"
-                            title="Crear venta"
-                          >
-                            <i className="ri-shopping-cart-line"></i>
-                          </button>
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              handleAssignPriceList(customer.id);
-                            }}
-                            className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
-                            title="Asignar lista"
-                          >
-                            <i className="ri-price-tag-3-line"></i>
-                          </button>
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              handleToggleBlock(customer.id);
-                            }}
-                            className={`p-2 transition-colors cursor-pointer ${
-                              customer.status === 'active'
-                                ? 'text-gray-400 hover:text-red-600 dark:hover:text-red-400'
-                                : 'text-red-600 dark:text-red-400 hover:text-green-600 dark:hover:text-green-400'
-                            }`}
-                            title={customer.status === 'active' ? 'Bloquear' : 'Desbloquear'}
-                          >
-                            <i className={customer.status === 'active' ? 'ri-lock-line' : 'ri-lock-unlock-line'}></i>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="flex gap-3">
+              <select
+                value={selectedTaxCondition}
+                onChange={e => setSelectedTaxCondition(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
+              >
+                {taxConditions.map(condition => (
+                  <option key={condition} value={condition}>
+                    {condition}
+                  </option>
+                ))}
+              </select>
+
+              <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showWithDebt}
+                  onChange={e => setShowWithDebt(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm text-black dark:text-white whitespace-nowrap">Con deuda</span>
+              </label>
+
+              <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showNoRecentPurchases}
+                  onChange={e => setShowNoRecentPurchases(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm text-black dark:text-white whitespace-nowrap">Sin compras 90d</span>
+              </label>
             </div>
 
-            {filteredCustomers.length === 0 && (
-              <div className="text-center py-8">
-                <i className="ri-user-line text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
-                <p className="text-gray-500 dark:text-gray-400">No se encontraron clientes</p>
-              </div>
-            )}
-          </Card>
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Atajos: <span className="font-mono">/ Buscar</span> • <span className="font-mono">N Nuevo</span> •{' '}
-              <span className="font-mono">Ctrl+E Estado de cuenta</span>
-            </p>
+            <div className="flex gap-2">
+              <Button variant="primary" onClick={handleNewCustomer}>
+                <i className="ri-add-line mr-2"></i>
+                Nuevo (N)
+              </Button>
+              <Button variant="outline" onClick={handleImportCSV}>
+                <i className="ri-upload-line mr-2"></i>
+                Importar CSV
+              </Button>
+            </div>
           </div>
+        </Card>
+
+        <Card padding="sm">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Nombre
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                    CUIT/DNI
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Email
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Teléfono
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Condición IVA
+                  </th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Saldo/Deuda
+                  </th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Última compra
+                  </th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Lista de precios
+                  </th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCustomers.map(customer => (
+                  <tr
+                    key={customer.id}
+                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50 cursor-pointer"
+                    onClick={() => handleCustomerClick(customer)}
+                  >
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                            {customer.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <div className="font-medium text-black dark:text-white">{customer.name}</div>
+                          <div className="flex gap-1 mt-1">
+                            {customer.tags.map(tag => (
+                              <span
+                                key={tag}
+                                className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-mono text-sm text-black dark:text-white">{customer.document}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-gray-600 dark:text-gray-400">{customer.email}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-gray-600 dark:text-gray-400">{customer.phone}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-black dark:text-white">{customer.taxCondition}</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">{getBalanceBadge(customer.balance)}</td>
+                    <td className="py-3 px-4 text-center">
+                      <span className="text-gray-600 dark:text-gray-400">{formatDate(customer.lastPurchase)}</span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span className="text-black dark:text-white">{customer.priceList}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleCreateSale(customer.id);
+                          }}
+                          className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors cursor-pointer"
+                          title="Crear venta"
+                        >
+                          <i className="ri-shopping-cart-line"></i>
+                        </button>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleAssignPriceList(customer.id);
+                          }}
+                          className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                          title="Asignar lista"
+                        >
+                          <i className="ri-price-tag-3-line"></i>
+                        </button>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleToggleBlock(customer.id);
+                          }}
+                          className={`p-2 transition-colors cursor-pointer ${
+                            customer.status === 'active'
+                              ? 'text-gray-400 hover:text-red-600 dark:hover:text-red-400'
+                              : 'text-red-600 dark:text-red-400 hover:text-green-600 dark:hover:text-green-400'
+                          }`}
+                          title={customer.status === 'active' ? 'Bloquear' : 'Desbloquear'}
+                        >
+                          <i className={customer.status === 'active' ? 'ri-lock-line' : 'ri-lock-unlock-line'}></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredCustomers.length === 0 && (
+            <div className="text-center py-8">
+              <i className="ri-user-line text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+              <p className="text-gray-500 dark:text-gray-400">No se encontraron clientes</p>
+            </div>
+          )}
+        </Card>
+
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Atajos: <span className="font-mono">/ Buscar</span> • <span className="font-mono">N Nuevo</span> •{' '}
+            <span className="font-mono">Ctrl+E Estado de cuenta</span>
+          </p>
         </div>
       </div>
 
@@ -559,6 +554,6 @@ export default function CustomersPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
