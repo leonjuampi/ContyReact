@@ -11,7 +11,7 @@ import {
   getCustomers,
   createCustomer, 
   updateCustomer, 
-  deleteCustomer, // (Aún no lo usamos, pero está listo)
+  deleteCustomer,
   downloadCustomerTemplate,
   importCustomersCSV,
   CustomerPayload, 
@@ -19,7 +19,6 @@ import {
 } from '../../services/customer.api';
 
 // 2. Mapeo de valores (Frontend <-> Backend)
-// Tu frontend usa "Responsable Inscripto", tu API usa "RI"
 const taxConditionApiMap: Record<string, string> = {
   'Todas': '',
   'Responsable Inscripto': 'RI',
@@ -41,27 +40,21 @@ const statusApiMap: Record<string, string> = {
   'Bloqueado': 'BLOCKED'
 };
 
-// const priceLists = ['Todas', 'General', 'Minorista', 'Mayorista', 'Mayorista Plus'];
-// TODO: Cargar 'priceLists' desde la API (GET /api/pricelists)
-// Por ahora, usaremos los IDs fijos en el modal.
+// --- EL MAPA DE PRICELIST SE ELIMINÓ ---
 
 export default function CustomersPage() {
   
-  // 3. Modifica los estados para recibir datos de la API
-  const [customers, setCustomers] = useState<Customer[]>([]); // Inicia vacío
+  // ... (Todos tus estados: customers, isLoading, ... toast NO CAMBIAN)
+  const [customers, setCustomers] = useState<Customer[]>([]); 
   const [isLoading, setIsLoading] = useState(true);
   const [totalCustomers, setTotalCustomers] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(20);
-  
-  // Estados de filtros (sin cambios)
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTaxCondition, setSelectedTaxCondition] = useState('Todas');
   const [showWithDebt, setShowWithDebt] = useState(false);
   const [showNoRecentPurchases, setShowNoRecentPurchases] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState('Todos'); // Estado que faltaba
-  
-  // Estados de Modales (sin cambios)
+  const [selectedStatus, setSelectedStatus] = useState('Todos'); 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showCustomerDetail, setShowCustomerDetail] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -70,11 +63,10 @@ export default function CustomersPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   
-  // 4. Función para cargar clientes desde la API
+  // ... (fetchCustomers, useEffects, handleCustomerClick, ... handleImportCustomers, handleDownloadTemplate ... NO CAMBIAN)
   const fetchCustomers = () => {
     setIsLoading(true);
     
-    // Mapea los filtros del estado a lo que la API espera
     const filters = {
       search: searchTerm || undefined,
       status: statusApiMap[selectedStatus] || undefined,
@@ -99,29 +91,22 @@ export default function CustomersPage() {
       });
   };
 
-  // 5. useEffect para cargar/filtrar datos
-  //    (Reemplaza tu useEffect de filtrado local)
   useEffect(() => {
-    // Usamos un 'debounce' (retraso) para no llamar a la API en cada tecla
     const timerId = setTimeout(() => {
-      // Reiniciamos a la página 1 si el filtro cambia
       if (currentPage !== 1) {
         setCurrentPage(1);
       } else {
         fetchCustomers();
       }
-    }, 300); // 300ms de espera
+    }, 300);
 
     return () => clearTimeout(timerId);
   }, [searchTerm, selectedTaxCondition, selectedStatus, showWithDebt, showNoRecentPurchases]);
 
-  // useEffect para paginación
   useEffect(() => {
     fetchCustomers();
   }, [currentPage]);
   
-
-  // Atajos de teclado (sin cambios)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '/' && !e.ctrlKey && !e.altKey) {
@@ -143,12 +128,7 @@ export default function CustomersPage() {
   }, []);
 
   const handleCustomerClick = (customer: Customer) => {
-    // Podríamos cargar el detalle completo aquí
-    // getCustomerById(customer.id).then(fullCustomer => {
-    //   setSelectedCustomer(fullCustomer);
-    //   setShowCustomerDetail(true);
-    // }).catch(e => showToast(e.message, 'error'));
-    setSelectedCustomer(customer); // Por ahora usamos los datos de la lista
+    setSelectedCustomer(customer); 
     setShowCustomerDetail(true);
   };
 
@@ -166,7 +146,6 @@ export default function CustomersPage() {
     setShowImportModal(true);
   };
 
-  // 6. Conectar la importación de CSV
   const handleImportCustomers = async (file: File) => {
     setIsLoading(true);
     try {
@@ -177,7 +156,7 @@ export default function CustomersPage() {
         console.error('Errores de importación:', result.errors);
       }
       showToast(message, result.errorCount > 0 ? 'info' : 'success');
-      fetchCustomers(); // Recargar lista
+      fetchCustomers();
     } catch (error: any) {
       showToast(`Error al importar: ${error.message}`, 'error');
     } finally {
@@ -186,7 +165,6 @@ export default function CustomersPage() {
     }
   };
 
-  // 7. Conectar la descarga de plantilla
   const handleDownloadTemplate = async () => {
     try {
       await downloadCustomerTemplate();
@@ -195,21 +173,18 @@ export default function CustomersPage() {
     }
   };
 
-
-  const handleCreateSale = (customerId: string | number) => {
+  const handleCreateSale = (e: React.MouseEvent, customerId: string | number) => {
     e.stopPropagation();
     console.log('Crear venta para cliente:', customerId);
-    // Idealmente: navigate(`/ventas?clienteId=${customerId}`);
   };
 
-  const handleAssignPriceList = (customerId: string | number) => {
+  const handleAssignPriceList = (e: React.MouseEvent, customerId: string | number) => {
     e.stopPropagation();
     console.log('Asignar lista de precios:', customerId);
   };
 
-  // 8. Conectar la lógica de Bloquear/Activar (PUT)
   const handleToggleBlock = async (e: React.MouseEvent, customer: Customer) => {
-    e.stopPropagation(); // Evitar que se abra el detalle
+    e.stopPropagation(); 
     
     const newStatus = customer.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE';
     
@@ -217,7 +192,6 @@ export default function CustomersPage() {
       await updateCustomer(customer.id, { status: newStatus });
       showToast(`Cliente ${newStatus === 'ACTIVE' ? 'activado' : 'bloqueado'}`, 'success');
       
-      // Actualizar solo este cliente en el estado local (más rápido que un refetch)
       setCustomers(prev => 
         prev.map(c => c.id === customer.id ? { ...c, status: newStatus } : c)
       );
@@ -231,23 +205,13 @@ export default function CustomersPage() {
     console.log('Enviar estado de cuenta');
   };
 
-  // 9. Conectar el guardado (POST / PUT)
-  const handleSaveCustomer = async (formData: Omit<Customer, 'id' | 'balance' | 'lastPurchase' | 'priceListName' | 'lastPurchaseAt'>) => {
+  // --- 9. ACTUALIZAR HANDLESAVECUSTOMER ---
+  const handleSaveCustomer = async (
+    // La data del formulario ahora viene con 'priceListId' (num)
+    formData: Omit<Customer, 'id' | 'balance' | 'lastPurchaseAt' | 'priceListName'> & { priceListId: number }
+  ) => {
     
-    // Mapear datos del Form (Frontend) al Payload (Backend)
-    // El modal usa "document" pero la API "taxId"
-    // El modal usa "Responsable Inscripto" pero la API "RI"
-    // El modal usa "active" pero la API "ACTIVE"
-    
-    // ❗️ ATENCIÓN: priceListId está fijo. Necesitamos un GET /api/pricelists
-    // para llenar el dropdown en el modal y obtener el ID correcto.
-    // Por ahora, asumimos que 'General' = 1, 'Mayorista' = 2, etc.
-    const priceListIdMap: Record<string, number> = {
-      'General': 1,
-      'Minorista': 2,
-      'Mayorista': 3,
-      'Mayorista Plus': 4
-    };
+    // --- BORRADO EL MAPA HARDCODEADO ---
     
     const payload: CustomerPayload = {
       name: formData.name,
@@ -259,32 +223,33 @@ export default function CustomersPage() {
       status: formData.status.toUpperCase() as CustomerPayload['status'], // Mapeo
       notes: formData.notes,
       tags: formData.tags,
-      priceListId: priceListIdMap[formData.priceList] || 1 // <-- Mapeo temporal
+      priceListId: formData.priceListId // <-- USAR EL ID DIRECTO DEL FORMULARIO
     };
 
     try {
       if (editingCustomer) {
-        // --- Llamar a la API para ACTUALIZAR ---
         await updateCustomer(editingCustomer.id, payload);
         showToast('Cliente actualizado exitosamente', 'success');
       } else {
-        // --- Llamar a la API para CREAR ---
         await createCustomer(payload);
         showToast('Cliente creado exitosamente', 'success');
       }
       
-      // Cerrar modal y recargar la lista
       setShowCustomerModal(false);
       setEditingCustomer(null);
-      fetchCustomers(); 
+      fetchCustomers(); // Recargar la lista
 
     } catch (error: any) {
       console.error('Error al guardar cliente:', error);
+      // El error de la API (ej. 'priceListId not found') se mostrará aquí
       showToast(`Error al guardar: ${error.message}`, 'error');
+      
+      // Lanzar el error para que el modal sepa que falló
+      throw new Error(error.message);
     }
   };
   
-  // --- (Funciones de formato no cambian) ---
+  // --- (Funciones de formato, showToast, etc. NO CAMBIAN) ---
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -304,9 +269,10 @@ export default function CustomersPage() {
   };
 
   const getBalanceBadge = (balance: number) => {
+    // (Sin cambios)
     if (balance === 0) {
       return <span className="text-gray-600 dark:text-gray-400">Sin saldo</span>;
-    } else if (balance < 0) { // Asumo que negativo es "Debe"
+    } else if (balance < 0) { 
       return (
         <span className="text-red-600 dark:text-red-400 font-medium">
           Debe: {formatCurrency(balance)}
@@ -322,6 +288,7 @@ export default function CustomersPage() {
   };
 
   const getStatusBadge = (status: string) => {
+    // (Sin cambios)
     return status === 'ACTIVE' ? (
       <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
         Activo
@@ -333,10 +300,11 @@ export default function CustomersPage() {
     );
   };
   
-  // --- (Inicio del JSX) ---
+  // --- (El JSX de return NO CAMBIA NADA) ---
   return (
     <>
       <div className="p-6">
+        {/* ... (Header y Card de Filtros) ... */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-black dark:text-white mb-2">Clientes</h1>
           <p className="text-gray-600 dark:text-gray-400">Gestiona tu base de clientes</p>
@@ -410,6 +378,7 @@ export default function CustomersPage() {
           </div>
         </Card>
 
+        {/* ... (Card de la tabla) ... */}
         <Card padding="sm">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -497,20 +466,14 @@ export default function CustomersPage() {
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-2">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCreateSale(customer.id);
-                          }}
+                          onClick={(e) => handleCreateSale(e, customer.id)}
                           className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors cursor-pointer"
                           title="Crear venta"
                         >
                           <i className="ri-shopping-cart-line"></i>
                         </button>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAssignPriceList(customer.id);
-                          }}
+                          onClick={(e) => handleAssignPriceList(e, customer.id)}
                           className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
                           title="Asignar lista"
                         >
@@ -550,16 +513,7 @@ export default function CustomersPage() {
           )}
         </Card>
 
-        {/* 10. TODO: Paginación */}
-        {/* Aquí deberías agregar botones de paginación que actualicen 'currentPage' */}
-        {/*
-        <div className="flex justify-center mt-6">
-          <Button onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>Anterior</Button>
-          <span className="p-2">{currentPage} / {Math.ceil(totalCustomers / pageSize)}</span>
-          <Button onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage * pageSize >= totalCustomers}>Siguiente</Button>
-        </div>
-        */}
-
+        {/* ... (Paginación y Atajos) ... */}
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Atajos: <span className="font-mono">/ Buscar</span> • <span className="font-mono">N Nuevo</span> •{' '}
@@ -568,7 +522,7 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* 11. Modales (No cambian, pero los handlers que les pasamos SÍ) */}
+      {/* Modales */}
       {showCustomerDetail && selectedCustomer && (
         <CustomerDetail
           customer={selectedCustomer}
@@ -577,7 +531,7 @@ export default function CustomersPage() {
             setSelectedCustomer(null);
           }}
           onSendStatement={handleSendStatement}
-          onEditCustomer={handleEditCustomer} // <-- Ya estaba
+          onEditCustomer={handleEditCustomer}
         />
       )}
 
@@ -588,19 +542,19 @@ export default function CustomersPage() {
             setShowCustomerModal(false);
             setEditingCustomer(null);
           }}
-          onSave={handleSaveCustomer} // <-- Ahora llama a la API
+          onSave={handleSaveCustomer} 
         />
       )}
 
       {showImportModal && (
         <ImportCSVModal 
           onClose={() => setShowImportModal(false)} 
-          onImport={handleImportCustomers} // <-- Ahora sube el archivo
-          onDownloadTemplate={handleDownloadTemplate} // <-- Ahora descarga de la API
+          onImport={handleImportCustomers} 
+          onDownloadTemplate={handleDownloadTemplate} 
         />
       )}
 
-      {/* ... (Tu Toast no cambia) ... */}
+      {/* Toast */}
       {toast && (
         <div
           className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${

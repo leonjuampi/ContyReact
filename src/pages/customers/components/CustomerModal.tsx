@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react';
 import Button from '../../../components/base/Button';
 import Card from '../../../components/base/Card';
-import { Customer } from '../../services/customer.api'; // <-- Importamos la interfaz
+import { Customer } from '../../services/customer.api';
+
+// --- 1. IMPORTAR CON LA RUTA ALIAS CORREGIDA ---
+// (Usamos @ que apunta a 'src/')
+import { PriceList, getPriceLists } from '@/services/priceList.api'; 
 
 interface CustomerModalProps {
   customer?: Customer | null;
   onClose: () => void;
-  // La data que recibe onSave ahora coincide con el formulario
-  onSave: (customer: Omit<Customer, 'id' | 'balance' | 'lastPurchaseAt' | 'priceListName'>) => void;
+  // --- 2. ACTUALIZAR ONSAVE ---
+  // Ahora onSave enviará 'priceListId' (un número)
+  onSave: (customer: Omit<Customer, 'id' | 'balance' | 'lastPurchaseAt' | 'priceListName'> & { priceListId: number }) => void;
 }
 
 // Mapeo Frontend
@@ -18,14 +23,8 @@ const taxConditions = [
   'Exento'
 ];
 
-// Mapeo Frontend (Temporal)
-// TODO: Recibir esto como 'prop' desde la página principal
-const priceLists = [
-  { id: 1, name: 'General' },
-  { id: 2, name: 'Minorista' },
-  { id: 3, name: 'Mayorista' },
-  { id: 4, name: 'Mayorista Plus' }
-];
+// --- 3. ELIMINAR EL ARRAY HARDCODEADO ---
+// const priceLists = [ ... ]; // <-- BORRADO
 
 // Mapeo Inverso (Backend -> Frontend)
 const taxConditionDisplayMap: Record<string, string> = {
@@ -34,34 +33,54 @@ const taxConditionDisplayMap: Record<string, string> = {
   'MT': 'Monotributista',
   'EX': 'Exento'
 };
-const priceListNameMap: Record<number, string> = {
-  1: 'General',
-  2: 'Minorista',
-  3: 'Mayorista',
-  4: 'Mayorista Plus'
-};
+// const priceListNameMap: Record<number, string> = { ... }; // <-- BORRADO
 
 
 export default function CustomerModal({ customer, onClose, onSave }: CustomerModalProps) {
   
-  // El estado del formulario ahora coincide con el frontend
+  // --- 4. ACTUALIZAR ESTADO DEL FORMULARIO ---
   const [formData, setFormData] = useState({
     name: '',
-    document: '', // <-- Usamos 'document' en el form
+    document: '', 
     email: '',
     phone: '',
     taxCondition: 'Consumidor Final',
-    priceList: 'General', // <-- Usamos el 'name' en el form
+    priceListId: 0, // <-- CAMBIADO: de 'priceList: "General"' a 'priceListId: 0'
     tags: [] as string[],
     address: '',
     notes: '',
     status: 'active' as 'active' | 'blocked'
   });
 
+  // --- 5. AÑADIR ESTADO PARA LAS LISTAS ---
+  const [availablePriceLists, setAvailablePriceLists] = useState<PriceList[]>([]);
+  const [isLoadingLists, setIsLoadingLists] = useState(true);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newTag, setNewTag] = useState('');
 
+  // --- 6. AÑADIR USEEFFECT PARA CARGAR LISTAS ---
+  useEffect(() => {
+    // Cargar listas de precio al abrir el modal
+    getPriceLists()
+      .then(lists => {
+        setAvailablePriceLists(lists);
+        if (lists.length > 0 && !customer) {
+          // Si es un cliente nuevo, asigna la primera lista por defecto
+          setFormData(prev => ({ ...prev, priceListId: lists[0].id }));
+        }
+      })
+      .catch(err => {
+        console.error("Error fetching price lists:", err);
+        setErrors(prev => ({ ...prev, priceList: 'Error al cargar listas de precio' }));
+      })
+      .finally(() => {
+        setIsLoadingLists(false);
+      });
+  }, []); // Se ejecuta solo una vez al montar
+
+  // --- 7. ACTUALIZAR USEEFFECT [customer] ---
   useEffect(() => {
     if (customer) {
       setFormData({
@@ -70,7 +89,7 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
         email: customer.email || '',
         phone: customer.phone || '',
         taxCondition: taxConditionDisplayMap[customer.taxCondition] || 'Consumidor Final', // RI -> Responsable Inscripto
-        priceList: customer.priceListName || priceListNameMap[customer.priceListId] || 'General', // 1 -> General
+        priceListId: customer.priceListId, // <-- CAMBIADO
         tags: customer.tags || [],
         address: customer.address || '',
         notes: customer.notes || '',
@@ -91,7 +110,7 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [formData]); // <-- Añadido formData para que 'handleSubmit' tenga los datos actualizados
+  }, [formData]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -112,10 +131,14 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
     if (formData.email && !isValidEmail(formData.email)) {
       newErrors.email = 'Email inválido';
     }
-
-    // El teléfono ya no es obligatorio en el backend, pero sí en tu mock. Lo dejamos.
+    
     if (!formData.phone.trim()) {
       newErrors.phone = 'El teléfono es obligatorio';
+    }
+
+    // --- 8. AÑADIR VALIDACIÓN PARA PRICELISTID ---
+    if (!formData.priceListId || formData.priceListId === 0) {
+      newErrors.priceList = 'Debe seleccionar una lista de precios';
     }
 
     setErrors(newErrors);
@@ -128,7 +151,11 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
   };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    // --- 9. ACTUALIZAR HANDLEINPUTCHANGE ---
+    // Convertir el ID de la lista a número
+    const finalValue = field === 'priceListId' ? Number(value) : value;
+
+    setFormData(prev => ({ ...prev, [field]: finalValue }));
     
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
@@ -159,13 +186,10 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
 
     setIsSubmitting(true);
     
-    // onSave ahora es async, así que podemos 'await'
     try {
-      // El 'onSave' de la página principal hace el mapeo y la llamada API
-      await onSave(formData); 
-      // El 'onClose' se llama desde la página principal si onSave tiene éxito
+      // --- 10. AJUSTAR LLAMADA A ONSAVE ---
+      await onSave(formData);
     } catch (error) {
-      // El error ya se muestra en el Toast de la página principal
       console.error('Error en handleSubmit (modal)', error);
     } finally {
       setIsSubmitting(false);
@@ -292,18 +316,29 @@ export default function CustomerModal({ customer, onClose, onSave }: CustomerMod
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Lista de precios
+                    Lista de precios <span className="text-red-500">*</span>
                   </label>
+                  {/* --- 11. ACTUALIZAR EL SELECT DE LISTA DE PRECIOS --- */}
                   <select
-                    value={formData.priceList}
-                    onChange={(e) => handleInputChange('priceList', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white text-sm pr-8"
+                    value={formData.priceListId}
+                    onChange={(e) => handleInputChange('priceListId', e.target.value)}
+                    disabled={isLoadingLists}
+                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white text-sm pr-8 ${
+                      errors.priceList 
+                        ? 'border-red-300 dark:border-red-600 focus:ring-red-500 focus:border-red-500' 
+                        : 'border-gray-300 dark:border-gray-600 focus:ring-black dark:focus:ring-white focus:border-transparent'
+                    }`}
                   >
-                    {/* TODO: Cargar esto desde la API */}
-                    {priceLists.map(list => (
-                      <option key={list.id} value={list.name}>{list.name}</option>
+                    <option value={0} disabled>
+                      {isLoadingLists ? 'Cargando listas...' : 'Seleccionar lista'}
+                    </option>
+                    {availablePriceLists.map(list => (
+                      <option key={list.id} value={list.id}>
+                        {list.name}
+                      </option>
                     ))}
                   </select>
+                  {errors.priceList && <p className="text-red-500 text-xs mt-1">{errors.priceList}</p>}
                 </div>
 
                 <div className="md:col-span-2">
