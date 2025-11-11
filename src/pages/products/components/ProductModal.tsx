@@ -1,28 +1,14 @@
 import { useState, useEffect } from 'react';
 import Button from '../../../components/base/Button';
 // --- 1. IMPORTAR API DE CATEGORÍAS ---
-// import { Category, getCategories, Subcategory } from '@/services/category.api'; // <-- DESACTIVADO POR AHORA
-
-// --- INTERFAZ SIMULADA ---
-interface Category {
-  id: number;
-  name: string;
-  subcategories?: Subcategory[];
-}
-interface Subcategory {
-  id: number;
-  category_id: number;
-  name: string;
-}
-// --- FIN INTERFAZ SIMULADA ---
-
+import { Category, getCategories, Subcategory } from '@/services/category.api'; // <-- ¡MODIFICADO!
 
 // --- 2. ACTUALIZAR INTERFAZ ---
 interface ProductData {
   sku: string;
   name: string;
   categoryId: number; 
-  categoryName?: string; // <-- AÑADIMOS ESTO PARA EL MOCK
+  categoryName?: string;
   subcategoryId?: number;
   price: number;
   cost: number;
@@ -59,17 +45,7 @@ const mockMovements = [
   { date: '2024-01-10', type: 'Compra', quantity: 10, reference: 'C-0045', balance: 25 },
 ];
 
-// --- 3. AÑADIR MOCK DE CATEGORÍAS ---
-const mockCategories: Category[] = [
-  { id: 1, name: 'Camisas', subcategories: [] },
-  { id: 2, name: 'Pantalones', subcategories: [] },
-  { id: 3, name: 'Calzado', subcategories: [{id: 10, category_id: 3, name: "Zapatillas"}] },
-  { id: 4, name: 'Buzos', subcategories: [] },
-  { id: 5, name: 'Accesorios', subcategories: [] },
-  { id: 6, name: 'Test', subcategories: [] },
-  { id: 7, name: 'Ropa', subcategories: [] },
-];
-
+// --- 3. MOCK DE CATEGORÍAS ELIMINADO ---
 
 export default function ProductModal({ product, onClose, onSave }: ProductModalProps) {
   const [activeTab, setActiveTab] = useState('datos');
@@ -97,28 +73,44 @@ export default function ProductModal({ product, onClose, onSave }: ProductModalP
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false); 
 
-  // --- 4. USAR MOCK DE CATEGORÍAS ---
-  const [categories, setCategories] = useState<Category[]>(mockCategories);
-  const [isLoadingCategories, setIsLoadingCategories] = useState(false); // Ya no cargamos
+  // --- 4. ESTADOS PARA CATEGORÍAS REALES ---
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
 
-  // --- 5. ELIMINAR USEEFFECT DE CARGA ---
-  // useEffect(() => { ... getCategories() ... }, []); // <-- BORRADO
+  // --- 5. AÑADIR USEEFFECT PARA CARGA DE CATEGORÍAS ---
+  useEffect(() => {
+    setIsLoadingCategories(true);
+    getCategories() // Llama a tu API /api/categories
+      .then(data => {
+        // Tu API devuelve un objeto { items: [], ... }, ajustamos para obtener el array
+        const categoryItems = Array.isArray(data) ? data : (data as any).items || [];
+        setCategories(categoryItems);
+        
+        // Si es un producto NUEVO (!product), asigna la primera categoría por defecto
+        if (!product && categoryItems.length > 0) {
+          setFormData(prev => ({ ...prev, categoryId: categoryItems[0].id }));
+        }
+      })
+      .catch(err => {
+        console.error("Error fetching categories:", err);
+        setErrors(prev => ({ ...prev, category: 'Error al cargar categorías' }));
+      })
+      .finally(() => {
+        setIsLoadingCategories(false);
+      });
+  }, []); // Se ejecuta solo una vez al montar
 
+  // Este useEffect se encarga de popular el form SÓLO CUANDO se está EDITANDO
   useEffect(() => {
     if (product) {
-      // Si estamos editando, mapeamos el category_name a categoryId
-      const foundCategory = mockCategories.find(c => c.name === product.categoryName);
+      // Asumimos que 'product' (ProductData) ya tiene categoryId
+      // gracias al mapeo en page.tsx (paso 11) o al nuevo handleEdit
       setFormData({
         ...product,
-        categoryId: product.categoryId || foundCategory?.id || 0,
+        categoryId: product.categoryId || 0,
       });
-    } else {
-      // Si es nuevo, asignamos la primera categoría por defecto
-      if (categories.length > 0) {
-        setFormData(prev => ({ ...prev, categoryId: categories[0].id }));
-      }
     }
-  }, [product]);
+  }, [product]); // Solo depende de 'product'
 
   useEffect(() => {
     // Calcular margen automáticamente
@@ -186,6 +178,7 @@ export default function ProductModal({ product, onClose, onSave }: ProductModalP
 
   const getSubcategories = (): Subcategory[] => {
     if (!formData.categoryId) return [];
+    // La API de categorías devuelve las subcategorías anidadas
     const selectedCat = categories.find(c => c.id === formData.categoryId);
     return selectedCat?.subcategories || [];
   };
@@ -196,7 +189,35 @@ export default function ProductModal({ product, onClose, onSave }: ProductModalP
         <div className="flex h-[80vh]">
           {/* Panel principal */}
           <div className="flex-1 flex flex-col">
-            {/* ... (Header y Tabs no cambian) ... */}
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-xl font-bold text-black dark:text-white">
+                {product ? 'Editar Producto' : 'Nuevo Producto'}
+                </h2>
+                <div className="flex items-center space-x-2">
+                {/* Tabs */}
+                {tabs.map(tab => (
+                    <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg ${
+                        activeTab === tab.id
+                        ? 'bg-gray-100 dark:bg-gray-800 text-black dark:text-white'
+                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50'
+                    }`}
+                    >
+                    <i className={`${tab.icon} mr-2`}></i>
+                    {tab.label}
+                    </button>
+                ))}
+                </div>
+                <button
+                onClick={onClose}
+                className="p-2 text-gray-400 hover:text-black dark:hover:text-white"
+                >
+                <i className="ri-close-line text-xl"></i>
+                </button>
+            </div>
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
@@ -253,7 +274,7 @@ export default function ProductModal({ product, onClose, onSave }: ProductModalP
                     <label className="block text-sm font-medium text-black dark:text-white mb-2">
                       Categoría *
                     </label>
-                    {/* --- 6. USAR EL MOCK DE CATEGORÍAS --- */}
+                    {/* --- 6. USAR CATEGORÍAS REALES --- */}
                     <select
                       value={formData.categoryId || 0}
                       onChange={(e) => {

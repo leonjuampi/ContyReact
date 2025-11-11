@@ -17,8 +17,10 @@ import {
   importProductsCSV,
   ProductCreatePayload,
   ProductUpdatePayload,
-  ProductListResponse
+  ProductListResponse,
+  getProductById // <-- ¡AÑADIDO!
 } from '@/services/product.api'; // Usamos el alias @
+import { Category, getCategories } from '@/services/category.api'; // <-- ¡AÑADIDO!
 
 // --- 2. INTERFAZ INTERNA DEL FORMULARIO ---
 // (Esta es la data que esperamos del modal)
@@ -49,8 +51,9 @@ const statusApiMap: Record<string, string> = {
   'Inactivo': 'INACTIVE',
 };
 
-// TODO: Cargar categorías desde la API para los filtros
-const categories = ['Todas', 'Camisas', 'Pantalones', 'Calzado', 'Buzos', 'Accesorios'];
+// --- MODIFICADO: Estado para categorías reales ---
+const initialCategoryMap: { [key: number]: string } = {};
+const initialCategoryFilter = [{ id: 0, name: 'Todas' }];
 
 export default function ProductsPage() {
   
@@ -62,7 +65,12 @@ export default function ProductsPage() {
   const [pageSize] = useState(20);
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Todas'); // TODO: Cambiar a categoryId
+  
+  // --- Estados de Categoría Modificados ---
+  const [categories, setCategories] = useState(initialCategoryFilter);
+  const [categoryMap, setCategoryMap] = useState(initialCategoryMap);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(0); // <-- MODIFICADO
+  
   const [selectedStatus, setSelectedStatus] = useState('Todos');
   const [showLowStock, setShowLowStock] = useState(false);
   
@@ -73,15 +81,30 @@ export default function ProductsPage() {
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
 
-  // --- 4. FUNCIÓN PARA CARGAR PRODUCTOS ---
+  // --- NUEVO: Cargar Categorías para el filtro ---
+  useEffect(() => {
+    getCategories()
+      .then(data => {
+        const categoryItems = Array.isArray(data) ? data : (data as any).items || [];
+        const newMap: { [key: number]: string } = {};
+        categoryItems.forEach((cat: Category) => { newMap[cat.id] = cat.name; });
+        
+        setCategories([...initialCategoryFilter, ...categoryItems]);
+        setCategoryMap(newMap);
+      })
+      .catch(error => {
+        showToast('Error al cargar filtros de categoría', 'error');
+      });
+  }, []); // Carga solo una vez
+
+  // --- 4. FUNCIÓN PARA CARGAR PRODUCTOS (Modificada) ---
   const fetchProducts = () => {
     setIsLoading(true);
 
     const filters = {
       search: searchTerm || undefined,
       status: statusApiMap[selectedStatus] as 'ACTIVE' | 'INACTIVE' || undefined,
-      // TODO: Mapear 'selectedCategory' (string) a un categoryId (number)
-      // categoryId: categoryIdMap[selectedCategory] || undefined, 
+      categoryId: selectedCategoryId !== 0 ? selectedCategoryId : undefined, // <-- MODIFICADO
       stockLow: showLowStock || undefined,
       page: currentPage,
       pageSize: pageSize
@@ -92,10 +115,12 @@ export default function ProductsPage() {
         // Mapear datos de la API a la interfaz del frontend
         const frontendProducts = data.items.map(p => ({
           ...p,
-          // Añadir campos mock que la UI espera
-          // TODO: El stock real debe venir de la API. Tu API de lista no lo trae.
-          stock: p.stock ?? 0, // Usamos 0 si no viene
-          lowStock: p.stock ? p.stock < 10 : false, // Simulación
+          // El stock en la lista (GET /api/products) no viene por defecto.
+          // El backend debería calcularlo o lo simulamos.
+          // Tu backend NO lo incluye en la lista, así que lo simulamos.
+          // La llamada a getProductById (al editar) SÍ traerá el stock real.
+          stock: p.stock ?? 0, // Mantenemos la simulación
+          lowStock: p.stock ? p.stock < 10 : false, // Mantenemos la simulación
           image: `https://readdy.ai/api/search-image?query=${encodeURIComponent(p.name)}&width=80&height=80&seq=${p.id}&orientation=squarish`
         }));
         setProducts(frontendProducts);
@@ -103,7 +128,6 @@ export default function ProductsPage() {
       })
       .catch(error => {
         console.error('Error fetching products:', error);
-        // El error 401 (token) se mostrará aquí
         showToast(`Error al cargar productos: ${error.message}`, 'error');
       })
       .finally(() => {
@@ -111,9 +135,8 @@ export default function ProductsPage() {
       });
   };
 
-  // --- 5. ACTUALIZAR USEEFFECTS ---
+  // --- 5. ACTUALIZAR USEEFFECTS (Modificado) ---
   useEffect(() => {
-    // Reemplaza el filtrado local
     const timerId = setTimeout(() => {
       if (currentPage !== 1) {
         setCurrentPage(1);
@@ -123,7 +146,7 @@ export default function ProductsPage() {
     }, 300); // Debounce
 
     return () => clearTimeout(timerId);
-  }, [searchTerm, selectedCategory, selectedStatus, showLowStock]);
+  }, [searchTerm, selectedCategoryId, selectedStatus, showLowStock]); // <-- MODIFICADO
 
   useEffect(() => {
     // Paginación
@@ -157,7 +180,7 @@ export default function ProductsPage() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedProducts(products.map(p => String(p.id))); // IDs son números
+      setSelectedProducts(products.map(p => String(p.id)));
     } else {
       setSelectedProducts([]);
     }
@@ -171,12 +194,38 @@ export default function ProductsPage() {
     }
   };
 
-  const handleEdit = (product: Product) => {
-    // TODO: Idealmente, aquí llamar a getProductById(product.id)
-    // para obtener TODOS los detalles (variantes, etc.)
-    // Por ahora, pasamos los datos de la lista al modal
-    setEditingProduct(product);
-    setShowProductModal(true);
+  // --- ¡FUNCIÓN handleEdit MODIFICADA! ---
+  const handleEdit = async (product: Product) => { // 'product' aquí tiene 'stock: number' simulado
+    setIsLoading(true);
+    showToast('Cargando producto...', 'info');
+    try {
+      // 1. Llamamos al endpoint GET /api/products/{id}
+      const detailedProduct = await getProductById(product.id); // 'detailedProduct.stock' es VariantStock[]
+      
+      // 2. Calculamos el stock total
+      const totalStock = detailedProduct.stock.reduce((acc, s) => acc + s.qty, 0);
+
+      // 3. Creamos un objeto que sea compatible con 'Product | null'
+      //    (El 'Product' de la lista, que tiene 'stock: number')
+      const productForState: Product = {
+        ...detailedProduct, // Contiene todos los campos de API (id, name, category_id, etc.)
+        // PERO, 'detailedProduct.stock' (array) es un problema.
+        // Lo sobreescribimos.
+        stock: totalStock, // ¡Sobreescribimos 'stock' para que sea 'number'!
+        image: product.image, // Mantenemos la imagen de la lista
+        lowStock: totalStock < 10, // (o una lógica más compleja si min_qty existe)
+      };
+      
+      // 4. Abrimos el modal. El paso 11 (mapeo) se encargará
+      //    de traducir 'productForState' a 'ProductData' para el modal.
+      setEditingProduct(productForState);
+      setShowProductModal(true);
+
+    } catch (error: any) {
+      showToast(`Error al cargar producto: ${error.message}`, 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDuplicate = (product: Product) => {
@@ -208,7 +257,6 @@ export default function ProductsPage() {
     if (!confirm(`¿Estás seguro de que deseas archivar ${selectedProducts.length} productos?`)) return;
 
     try {
-      // Iterar y borrar uno por uno (o crear un endpoint /api/products/bulk-delete)
       for (const id of selectedProducts) {
         await deleteProduct(Number(id));
       }
@@ -380,14 +428,14 @@ export default function ProductsPage() {
 
             {/* Filtros */}
             <div className="flex gap-3">
+              {/* --- FILTRO DE CATEGORÍA MODIFICADO --- */}
               <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
+                value={selectedCategoryId}
+                onChange={(e) => setSelectedCategoryId(Number(e.target.value))}
                 className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
               >
-                {/* TODO: Cargar 'categories' desde la API */}
                 {categories.map(category => (
-                  <option key={category} value={category}>{category}</option>
+                  <option key={category.id} value={category.id}>{category.name}</option>
                 ))}
               </select>
 
@@ -598,15 +646,16 @@ export default function ProductsPage() {
       {/* Modal de producto */}
       {showProductModal && (
         <ProductModal
-          // --- 11. MAPEAR DATOS AL MODAL ---
+          // --- 11. MAPEAR DATOS AL MODAL (Esta lógica ahora usa el 'productForState' de handleEdit) ---
           product={editingProduct ? {
             ...editingProduct,
             categoryId: editingProduct.category_id,
             subcategoryId: editingProduct.subcategory_id,
             taxRate: editingProduct.vat_percent,
             status: editingProduct.status,
-            stock: editingProduct.stock ?? 0, 
+            stock: editingProduct.stock ?? 0, // 'stock' ahora es el número calculado
             margin: editingProduct.cost > 0 ? (((editingProduct.price - editingProduct.cost) / editingProduct.cost) * 100) : 0,
+            barcode: (editingProduct as any).variants?.[0]?.barcode || '', // Opcional: tomar de variantes
           } : null}
           onClose={() => {
             setShowProductModal(false);
