@@ -1,10 +1,14 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '../../../components/base/Card';
 import Button from '../../../components/base/Button';
+// 1. Importar APIs
+import { getStockOverview, StockOverview } from '@/services/stock.api';
+import { getProducts, Product } from '@/services/product.api';
+import { useAuth } from '@/contexts/AuthContext';
 
+// 2. Mover la interfaz StockItem aquí (o a un archivo de tipos)
 interface StockItem {
-  id: string;
+  id: number;
   product: {
     name: string;
     sku: string;
@@ -14,65 +18,70 @@ interface StockItem {
   currentStock: number;
   minStock: number;
   value: number;
-  lastMovement: string;
+  lastMovement?: string; // El backend no provee esto en la lista
   isLowStock: boolean;
-  noMovement90Days: boolean;
+  noMovement90Days?: boolean; // El backend no provee esto en la lista
 }
 
-const mockStockData: StockItem[] = [
-  {
-    id: '1',
-    product: { name: 'Camisa Manga Larga Blanca', sku: 'CAM001', category: 'Camisas' },
-    warehouse: 'Depósito Central',
-    currentStock: 5,
-    minStock: 10,
-    value: 27500,
-    lastMovement: '2024-01-20',
-    isLowStock: true,
-    noMovement90Days: false
-  },
-  {
-    id: '2',
-    product: { name: 'Pantalón Jean Azul Classic', sku: 'PAN002', category: 'Pantalones' },
-    warehouse: 'Depósito Central',
-    currentStock: 25,
-    minStock: 15,
-    value: 222500,
-    lastMovement: '2024-01-21',
-    isLowStock: false,
-    noMovement90Days: false
-  },
-  {
-    id: '3',
-    product: { name: 'Cinturón Cuero Marrón', sku: 'ACC005', category: 'Accesorios' },
-    warehouse: 'Sucursal Norte',
-    currentStock: 18,
-    minStock: 5,
-    value: 68400,
-    lastMovement: '2023-10-15',
-    isLowStock: false,
-    noMovement90Days: true
-  }
-];
-
 export default function OverviewTab() {
-  const [selectedWarehouse, setSelectedWarehouse] = useState('all');
+  const { user } = useAuth();
+  
+  // 3. Estados para filtros y datos
+  const [selectedWarehouse, setSelectedWarehouse] = useState(user?.branchId?.toString() || 'all');
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
-  const [showNoMovementOnly, setShowNoMovementOnly] = useState(false);
+  const [showNoMovementOnly, setShowNoMovementOnly] = useState(false); // Este filtro no es soportado por el backend de /api/products
 
-  const filteredData = mockStockData.filter(item => {
-    if (selectedWarehouse !== 'all' && item.warehouse !== selectedWarehouse) return false;
-    if (showLowStockOnly && !item.isLowStock) return false;
-    if (showNoMovementOnly && !item.noMovement90Days) return false;
-    return true;
-  });
+  const [kpis, setKpis] = useState<StockOverview | null>(null);
+  const [products, setProducts] = useState<StockItem[]>([]);
+  const [isLoadingKpis, setIsLoadingKpis] = useState(true);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
 
-  const lowStockCount = mockStockData.filter(item => item.isLowStock).length;
-  const totalValue = mockStockData.reduce((sum, item) => sum + item.value, 0);
-  const noMovementCount = mockStockData.filter(item => item.noMovement90Days).length;
+  const branchId = selectedWarehouse === 'all' ? undefined : Number(selectedWarehouse);
 
-  const handleAdjustStock = (itemId: string) => {
+  // 4. useEffect para KPIs
+  useEffect(() => {
+    setIsLoadingKpis(true);
+    getStockOverview(branchId, 90) // 90 días por defecto
+      .then(data => {
+        setKpis(data);
+      })
+      .catch(err => console.error("Error fetching KPIs:", err))
+      .finally(() => setIsLoadingKpis(false));
+  }, [selectedWarehouse]);
+
+  // 5. useEffect para la tabla de productos
+  useEffect(() => {
+    setIsLoadingProducts(true);
+    getProducts({
+      branchId: branchId,
+      stockLow: showLowStockOnly || undefined,
+      // 'noMovement' no es un filtro de /api/products, el KPI lo cubre
+    })
+      .then(data => {
+        // Mapear respuesta de la API a la interfaz StockItem
+        const mappedProducts = data.items.map(p => ({
+          id: p.id,
+          product: {
+            name: p.name,
+            sku: p.sku,
+            category: p.category_name,
+          },
+          warehouse: branchId ? (user?.branchIds?.find(b => (b as any).id === branchId) as any)?.name || 'Sucursal' : 'Múltiples', // Simulado
+          currentStock: p.stock ?? 0, // /api/products no devuelve stock detallado, necesitamos mejorar ese endpoint
+          minStock: 10, // Simulado, esto debería venir de branch_variant_stock
+          value: (p.stock ?? 0) * p.cost, // Simulado
+          isLowStock: p.stock ? p.stock < 10 : false, // Simulado
+        }));
+        setProducts(mappedProducts);
+      })
+      .catch(err => console.error("Error fetching products:", err))
+      .finally(() => setIsLoadingProducts(false));
+
+  }, [selectedWarehouse, showLowStockOnly, showNoMovementOnly]); // showNoMovementOnly no hará nada
+
+  const handleAdjustStock = (itemId: string) | number) => {
     console.log('Ajustar stock para:', itemId);
+    // Esto debería abrir el modal de Movimientos (en el Tab padre)
   };
 
   const formatPrice = (price: number) => {
@@ -91,16 +100,13 @@ export default function OverviewTab() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Stock Bajo</p>
-              <p className="text-2xl font-bold text-black dark:text-white">{lowStockCount}</p>
+              <p className="text-2xl font-bold text-black dark:text-white">
+                {isLoadingKpis ? '...' : (kpis?.lowStock ?? 0)}
+              </p>
             </div>
             <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center">
               <i className="ri-error-warning-line text-red-600 dark:text-red-400 text-xl"></i>
             </div>
-          </div>
-          <div className="mt-2">
-            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400">
-              Requiere atención
-            </span>
           </div>
         </Card>
 
@@ -108,33 +114,27 @@ export default function OverviewTab() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Valor Inventario</p>
-              <p className="text-2xl font-bold text-black dark:text-white">{formatPrice(totalValue)}</p>
+              <p className="text-2xl font-bold text-black dark:text-white">
+                {isLoadingKpis ? '...' : formatPrice(kpis?.inventoryValue ?? 0)}
+              </p>
             </div>
             <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
               <i className="ri-money-dollar-circle-line text-green-600 dark:text-green-400 text-xl"></i>
             </div>
-          </div>
-          <div className="mt-2">
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              +5.2% vs mes anterior
-            </span>
           </div>
         </Card>
 
         <Card>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Sin Movimiento 90d</p>
-              <p className="text-2xl font-bold text-black dark:text-white">{noMovementCount}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Sin Movimiento {kpis?.noMovementDays || 90}d</p>
+              <p className="text-2xl font-bold text-black dark:text-white">
+                {isLoadingKpis ? '...' : (kpis?.noMovement ?? 0)}
+              </p>
             </div>
             <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center">
               <i className="ri-time-line text-yellow-600 dark:text-yellow-400 text-xl"></i>
             </div>
-          </div>
-          <div className="mt-2">
-            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400">
-              Revisar rotación
-            </span>
           </div>
         </Card>
       </div>
@@ -150,13 +150,13 @@ export default function OverviewTab() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
             >
               <option value="all">Todos los depósitos</option>
-              <option value="Depósito Central">Depósito Central</option>
-              <option value="Sucursal Norte">Sucursal Norte</option>
-              <option value="Sucursal Sur">Sucursal Sur</option>
+              {/* Deberías poblar esto con las sucursales del usuario desde useAuth */}
+              <option value="1">Depósito Central (Simulado)</option>
+              <option value="2">Sucursal Norte (Simulado)</option>
             </select>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-4 pt-7">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -184,6 +184,7 @@ export default function OverviewTab() {
       <Card padding="sm">
         <div className="overflow-x-auto">
           <table className="w-full">
+            {/* ... (Cabecera de la tabla no cambia) ... */}
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Producto</th>
@@ -198,73 +199,68 @@ export default function OverviewTab() {
               </tr>
             </thead>
             <tbody>
-              {filteredData.map((item) => (
-                <tr
-                  key={item.id}
-                  className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50"
-                >
-                  <td className="py-3 px-4">
-                    <div>
-                      <p className="font-medium text-black dark:text-white">{item.product.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.product.category}</p>
-                      {item.noMovement90Days && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400 mt-1">
-                          Sin movimiento
+              {isLoadingProducts ? (
+                <tr><td colSpan={9} className="text-center p-8 text-gray-500">Cargando...</td></tr>
+              ) : products.length === 0 ? (
+                <tr><td colSpan={9} className="text-center p-8 text-gray-500">No se encontraron productos.</td></tr>
+              ) : (
+                products.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50"
+                  >
+                    <td className="py-3 px-4">
+                      <div>
+                        <p className="font-medium text-black dark:text-white">{item.product.name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{item.product.category}</p>
+                        {/* 'noMovement90Days' no viene de la API de lista, lo quitamos */}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-mono text-sm text-black dark:text-white">{item.product.sku}</span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span className={`font-medium ${item.isLowStock ? 'text-red-600 dark:text-red-400' : 'text-black dark:text-white'}`}>
+                        {item.currentStock}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span className="text-gray-600 dark:text-gray-400">{item.minStock}</span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {item.isLowStock && (
+                        <span className="text-red-600 dark:text-red-400 font-medium">
+                          -{item.minStock - item.currentStock}
                         </span>
                       )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="font-mono text-sm text-black dark:text-white">{item.product.sku}</span>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`font-medium ${item.isLowStock ? 'text-red-600 dark:text-red-400' : 'text-black dark:text-white'}`}>
-                      {item.currentStock}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <span className="text-gray-600 dark:text-gray-400">{item.minStock}</span>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    {item.isLowStock && (
-                      <span className="text-red-600 dark:text-red-400 font-medium">
-                        -{item.minStock - item.currentStock}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-gray-600 dark:text-gray-400">{item.warehouse}</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <span className="font-medium text-black dark:text-white">{formatPrice(item.value)}</span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {item.lastMovement ? formatDate(item.lastMovement) : '-'}
                       </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-gray-600 dark:text-gray-400">{item.warehouse}</span>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <span className="font-medium text-black dark:text-white">{formatPrice(item.value)}</span>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(item.lastMovement).toLocaleDateString('es-AR')}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleAdjustStock(item.id)}
-                    >
-                      <i className="ri-edit-line mr-1"></i>
-                      Ajustar
-                    </Button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAdjustStock(item.id)}
+                      >
+                        <i className="ri-edit-line mr-1"></i>
+                        Ajustar
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
-
-        {filteredData.length === 0 && (
-          <div className="text-center py-8">
-            <i className="ri-box-3-line text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
-            <p className="text-gray-500 dark:text-gray-400">No se encontraron productos con los filtros aplicados</p>
-          </div>
-        )}
       </Card>
     </div>
   );
