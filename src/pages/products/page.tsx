@@ -1,4 +1,3 @@
-// 1. Imports eliminados: Sidebar, TopBar
 import { useState, useEffect } from 'react';
 import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
@@ -7,133 +6,130 @@ import BulkActions from './components/BulkActions';
 import ImportCSVModal from './components/ImportCSVModal';
 import LabelPrintModal from './components/LabelPrintModal';
 
-interface Product {
-  id: string;
+// --- 1. IMPORTAR APIS Y TIPOS ---
+import {
+  Product,
+  getProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  downloadProductTemplate,
+  importProductsCSV,
+  ProductCreatePayload,
+  ProductUpdatePayload,
+  ProductListResponse
+} from '@/services/product.api'; // Usamos el alias @
+
+// --- 2. INTERFAZ INTERNA DEL FORMULARIO ---
+// (Esta es la data que esperamos del modal)
+interface ProductData {
   sku: string;
   name: string;
-  category: string;
+  categoryId: number; 
+  subcategoryId?: number;
   price: number;
   cost: number;
   stock: number;
-  status: 'active' | 'inactive' | 'archived';
+  status: 'ACTIVE' | 'INACTIVE';
   margin: number;
   image?: string;
-  lowStock: boolean;
+  description?: string;
+  barcode?: string;
+  supplier?: string;
+  minStock?: number;
+  maxStock?: number;
+  location?: string;
+  taxRate?: number;
 }
 
-const mockProducts: Product[] = [
-  // ... (tus datos mock no cambian)
-  {
-    id: '1',
-    sku: 'CAM001',
-    name: 'Camisa Manga Larga Blanca',
-    category: 'Camisas',
-    price: 5500,
-    cost: 3200,
-    stock: 25,
-    status: 'active',
-    margin: 71.9,
-    image: 'https://readdy.ai/api/search-image?query=elegant%20white%20long%20sleeve%20dress%20shirt%20on%20clean%20white%20background%2C%20professional%20product%20photography%2C%20minimalist%20style%2C%20high%20quality%20commercial%20photo%2C%20centered%20composition%2C%20soft%20lighting&width=80&height=80&seq=prod1&orientation=squarish',
-    lowStock: false
-  },
-  {
-    id: '2',
-    sku: 'PAN002',
-    name: 'Pantalón Jean Azul Classic',
-    category: 'Pantalones',
-    price: 8900,
-    cost: 4800,
-    stock: 8,
-    status: 'active',
-    margin: 85.4,
-    image: 'https://readdy.ai/api/search-image?query=classic%20blue%20denim%20jeans%20pants%20on%20white%20background%2C%20product%20photography%2C%20minimalist%20commercial%20style%2C%20high%20quality%20image%2C%20centered%20composition%2C%20professional%20lighting&width=80&height=80&seq=prod2&orientation=squarish',
-    lowStock: true
-  },
-  {
-    id: '3',
-    sku: 'ZAP003',
-    name: 'Zapatillas Deportivas Negras',
-    category: 'Calzado',
-    price: 12400,
-    cost: 7200,
-    stock: 15,
-    status: 'active',
-    margin: 72.2,
-    image: 'https://readdy.ai/api/search-image?query=black%20sports%20sneakers%20on%20white%20background%2C%20product%20photography%2C%20minimalist%20commercial%20style%2C%20high%20quality%20image%2C%20centered%20composition%2C%20professional%20lighting%20for%20ecommerce&width=80&height=80&seq=prod3&orientation=squarish',
-    lowStock: false
-  },
-  {
-    id: '4',
-    sku: 'BUZ004',
-    name: 'Buzo Canguro Gris',
-    category: 'Buzos',
-    price: 7200,
-    cost: 4100,
-    stock: 2,
-    status: 'active',
-    margin: 75.6,
-    image: 'https://readdy.ai/api/search-image?query=gray%20hooded%20sweatshirt%20kangaroo%20pocket%20on%20white%20background%2C%20product%20photography%2C%20minimalist%20commercial%20style%2C%20high%20quality%20image%2C%20centered%20composition%2C%20professional%20lighting&width=80&height=80&seq=prod4&orientation=squarish',
-    lowStock: true
-  },
-  {
-    id: '5',
-    sku: 'ACC005',
-    name: 'Cinturón Cuero Marrón',
-    category: 'Accesorios',
-    price: 3800,
-    cost: 2200,
-    stock: 18,
-    status: 'inactive',
-    margin: 72.7,
-    image: 'https://readdy.ai/api/search-image?query=brown%20leather%20belt%20on%20white%20background%2C%20product%20photography%2C%20minimalist%20commercial%20style%2C%20high%20quality%20image%2C%20centered%20composition%2C%20professional%20lighting%20for%20ecommerce%20catalog&width=80&height=80&seq=prod5&orientation=squarish',
-    lowStock: false
-  }
-];
+// Mapeo de Estatus
+const statusApiMap: Record<string, string> = {
+  'Todos': '',
+  'Activo': 'ACTIVE',
+  'Inactivo': 'INACTIVE',
+};
 
+// TODO: Cargar categorías desde la API para los filtros
 const categories = ['Todas', 'Camisas', 'Pantalones', 'Calzado', 'Buzos', 'Accesorios'];
-const statusOptions = ['Todos', 'Activo', 'Inactivo', 'Archivado'];
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>(mockProducts);
+  
+  // --- 3. ACTUALIZAR ESTADOS ---
+  const [products, setProducts] = useState<Product[]>([]); // Inicia vacío
+  const [isLoading, setIsLoading] = useState(true);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(20);
+  
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Todas');
+  const [selectedCategory, setSelectedCategory] = useState('Todas'); // TODO: Cambiar a categoryId
   const [selectedStatus, setSelectedStatus] = useState('Todos');
   const [showLowStock, setShowLowStock] = useState(false);
+  
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  // const [showBulkActions, setShowBulkActions] = useState(false); // Esta variable no se usa, la comentamos
   const [showImportModal, setShowImportModal] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
 
+  // --- 4. FUNCIÓN PARA CARGAR PRODUCTOS ---
+  const fetchProducts = () => {
+    setIsLoading(true);
+
+    const filters = {
+      search: searchTerm || undefined,
+      status: statusApiMap[selectedStatus] as 'ACTIVE' | 'INACTIVE' || undefined,
+      // TODO: Mapear 'selectedCategory' (string) a un categoryId (number)
+      // categoryId: categoryIdMap[selectedCategory] || undefined, 
+      stockLow: showLowStock || undefined,
+      page: currentPage,
+      pageSize: pageSize
+    };
+
+    getProducts(filters)
+      .then((data: ProductListResponse) => {
+        // Mapear datos de la API a la interfaz del frontend
+        const frontendProducts = data.items.map(p => ({
+          ...p,
+          // Añadir campos mock que la UI espera
+          // TODO: El stock real debe venir de la API. Tu API de lista no lo trae.
+          stock: p.stock ?? 0, // Usamos 0 si no viene
+          lowStock: p.stock ? p.stock < 10 : false, // Simulación
+          image: `https://readdy.ai/api/search-image?query=${encodeURIComponent(p.name)}&width=80&height=80&seq=${p.id}&orientation=squarish`
+        }));
+        setProducts(frontendProducts);
+        setTotalProducts(data.total);
+      })
+      .catch(error => {
+        console.error('Error fetching products:', error);
+        // El error 401 (token) se mostrará aquí
+        showToast(`Error al cargar productos: ${error.message}`, 'error');
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  };
+
+  // --- 5. ACTUALIZAR USEEFFECTS ---
   useEffect(() => {
-    let filtered = products;
+    // Reemplaza el filtrado local
+    const timerId = setTimeout(() => {
+      if (currentPage !== 1) {
+        setCurrentPage(1);
+      } else {
+        fetchProducts();
+      }
+    }, 300); // Debounce
 
-    if (searchTerm) {
-      filtered = filtered.filter(product =>
-        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.sku.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
+    return () => clearTimeout(timerId);
+  }, [searchTerm, selectedCategory, selectedStatus, showLowStock]);
 
-    if (selectedCategory !== 'Todas') {
-      filtered = filtered.filter(product => product.category === selectedCategory);
-    }
-
-    if (selectedStatus !== 'Todos') {
-      const statusMap = { 'Activo': 'active', 'Inactivo': 'inactive', 'Archivado': 'archived' };
-      filtered = filtered.filter(product => product.status === statusMap[selectedStatus as keyof typeof statusMap]);
-    }
-
-    if (showLowStock) {
-      filtered = filtered.filter(product => product.lowStock);
-    }
-
-    setFilteredProducts(filtered);
-  }, [products, searchTerm, selectedCategory, selectedStatus, showLowStock]);
-
+  useEffect(() => {
+    // Paginación
+    fetchProducts();
+  }, [currentPage]);
+  
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '/' && !e.ctrlKey && !e.altKey) {
@@ -161,7 +157,7 @@ export default function ProductsPage() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedProducts(filteredProducts.map(p => p.id));
+      setSelectedProducts(products.map(p => String(p.id))); // IDs son números
     } else {
       setSelectedProducts([]);
     }
@@ -176,6 +172,9 @@ export default function ProductsPage() {
   };
 
   const handleEdit = (product: Product) => {
+    // TODO: Idealmente, aquí llamar a getProductById(product.id)
+    // para obtener TODOS los detalles (variantes, etc.)
+    // Por ahora, pasamos los datos de la lista al modal
     setEditingProduct(product);
     setShowProductModal(true);
   };
@@ -183,40 +182,113 @@ export default function ProductsPage() {
   const handleDuplicate = (product: Product) => {
     const newProduct = {
       ...product,
-      id: Date.now().toString(),
+      id: Date.now(), // ID temporal
       sku: product.sku + '-COPY',
       name: product.name + ' (Copia)'
     };
-    setProducts([...products, newProduct]);
+    // @ts-ignore
+    setEditingProduct(newProduct); // Abrir modal con datos duplicados
+    setShowProductModal(true);
   };
 
-  const handleArchive = (productId: string) => {
-    setProducts(products.map(p => 
-      p.id === productId ? { ...p, status: 'archived' as const } : p
-    ));
+  // --- 6. CONECTAR ARCHIVAR (DELETE) ---
+  const handleArchive = async (productId: number) => {
+    if (!confirm('¿Estás seguro de que deseas archivar este producto?')) return;
+
+    try {
+      await deleteProduct(productId);
+      showToast('Producto archivado exitosamente', 'success');
+      fetchProducts(); // Recargar la lista
+    } catch (error: any) {
+      showToast(`Error al archivar: ${error.message}`, 'error');
+    }
   };
 
-  const handleBulkArchive = () => {
-    setProducts(products.map(p => 
-      selectedProducts.includes(p.id) ? { ...p, status: 'archived' as const } : p // Corregido: 'archive' a 'archived'
-    ));
-    setSelectedProducts([]);
+  const handleBulkArchive = async () => {
+    if (!confirm(`¿Estás seguro de que deseas archivar ${selectedProducts.length} productos?`)) return;
+
+    try {
+      // Iterar y borrar uno por uno (o crear un endpoint /api/products/bulk-delete)
+      for (const id of selectedProducts) {
+        await deleteProduct(Number(id));
+      }
+      showToast(`${selectedProducts.length} productos archivados`, 'success');
+      fetchProducts(); // Recargar
+      setSelectedProducts([]);
+    } catch (error: any) {
+      showToast(`Error al archivar: ${error.message}`, 'error');
+    }
   };
 
   const handleImport = () => {
     setShowImportModal(true);
   };
 
-  const handleImportProducts = (importedProducts: Product[]) => {
-    // Aquí deberías castear 'any[]' a 'Product[]' o asegurar que onImport devuelva 'Product[]'
-    const newProducts = importedProducts.map(p => ({
-      ...p,
-      id: p.id || Date.now().toString(),
-      lowStock: p.stock <= (p.minStock || 10)
-    })) as Product[];
-    setProducts([...products, ...newProducts]);
-    setShowImportModal(false);
-    showToast(`Se importaron ${importedProducts.length} productos exitosamente`, 'success');
+  // --- 7. CONECTAR IMPORTACIÓN (POST /api/products/import) ---
+  const handleImportProducts = async (file: File) => {
+    setIsLoading(true);
+    try {
+      const result = await importProductsCSV(file);
+      let message = `Importación completada: ${result.successCount} creados.`;
+      if (result.errorCount > 0) {
+        message += ` ${result.errorCount} errores.`;
+        console.error('Errores de importación:', result.errors);
+      }
+      showToast(message, result.errorCount > 0 ? 'info' : 'success');
+      fetchProducts(); // Recargar lista
+      setShowImportModal(false); // Cerrar al éxito
+    } catch (error: any) {
+      showToast(`Error al importar: ${error.message}`, 'error');
+      // No cerramos el modal si hay error
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // --- 8. CONECTAR DESCARGA (GET /api/products/template.csv) ---
+  const handleDownloadTemplate = async () => {
+    try {
+      await downloadProductTemplate();
+    } catch (error: any) {
+      showToast(`Error al descargar plantilla: ${error.message}`, 'error');
+    }
+  };
+
+  // --- 9. CONECTAR GUARDADO (POST/PUT) ---
+  const handleSaveProduct = async (formData: ProductData) => {
+    // Mapear del formulario (ProductData) al Payload de la API
+    const payload: ProductCreatePayload | ProductUpdatePayload = {
+      name: formData.name,
+      sku: formData.sku,
+      categoryId: formData.categoryId,
+      subcategoryId: formData.subcategoryId || undefined,
+      price: formData.price,
+      cost: formData.cost,
+      description: formData.description,
+      vat_percent: formData.taxRate,
+      status: formData.status,
+    };
+
+    try {
+      if (editingProduct) {
+        // --- ACTUALIZAR (PUT) ---
+        await updateProduct(editingProduct.id, payload as ProductUpdatePayload);
+        showToast('Producto actualizado exitosamente', 'success');
+      } else {
+        // --- CREAR (POST) ---
+        // El backend crea el producto Y la variante default
+        await createProduct(payload as ProductCreatePayload);
+        showToast('Producto creado exitosamente', 'success');
+      }
+      setShowProductModal(false);
+      setEditingProduct(null);
+      fetchProducts(); // Recargar la lista
+    } catch (error: any) {
+      console.error('Error saving product:', error);
+      showToast(`Error al guardar: ${error.message}`, 'error');
+      // Lanzar error para que el modal sepa que falló
+      throw error;
+    }
   };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
@@ -233,10 +305,9 @@ export default function ProductsPage() {
   };
 
   const handleLabelPrint = (config: any) => {
-    const selectedProductsData = products.filter(p => selectedProducts.includes(p.id));
+    const selectedProductsData = products.filter(p => selectedProducts.includes(String(p.id)));
     console.log('Imprimiendo etiquetas:', { products: selectedProductsData, config });
     
-    // Simular impresión
     setTimeout(() => {
       setShowLabelModal(false);
       setSelectedProducts([]);
@@ -254,26 +325,32 @@ export default function ProductsPage() {
 
   const getStatusBadge = (status: string) => {
     const styles = {
-      active: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
-      inactive: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
-      archived: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
+      ACTIVE: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
+      INACTIVE: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
     };
     
     const labels = {
-      active: 'Activo',
-      inactive: 'Inactivo',
-      archived: 'Archivado'
+      ACTIVE: 'Activo',
+      INACTIVE: 'Inactivo',
     };
 
+    // @ts-ignore
+    if (!styles[status]) {
+      return (
+        <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400">
+          Archivado
+        </span>
+      );
+    }
+    // @ts-ignore
     return (
-      <span className={`px-2 py-1 text-xs font-medium rounded-full ${styles[status as keyof typeof styles]}`}>
-        {labels[status as keyof typeof labels]}
+      <span className={`px-2 py-1 text-xs font-medium rounded-full ${styles[status]}`}>
+        {labels[status]}
       </span>
     );
   };
 
-  // 3. JSX modificado: Eliminamos wrappers, Sidebar y TopBar.
-  //    Usamos un Fragment (<>) para devolver el contenido y los modales.
+  // --- 10. JSX (AJUSTES MÍNIMOS) ---
   return (
     <>
       <div className="p-6">
@@ -308,6 +385,7 @@ export default function ProductsPage() {
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
               >
+                {/* TODO: Cargar 'categories' desde la API */}
                 {categories.map(category => (
                   <option key={category} value={category}>{category}</option>
                 ))}
@@ -318,7 +396,7 @@ export default function ProductsPage() {
                 onChange={(e) => setSelectedStatus(e.target.value)}
                 className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
               >
-                {statusOptions.map(status => (
+                {Object.keys(statusApiMap).map(status => (
                   <option key={status} value={status}>{status}</option>
                 ))}
               </select>
@@ -384,7 +462,7 @@ export default function ProductsPage() {
                   <th className="text-left py-3 px-4 w-12">
                     <input
                       type="checkbox"
-                      checked={selectedProducts.length === filteredProducts.length && filteredProducts.length > 0}
+                      checked={products.length > 0 && selectedProducts.length === products.length}
                       onChange={(e) => handleSelectAll(e.target.checked)}
                       className="rounded"
                     />
@@ -402,7 +480,7 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map((product) => (
+                {products.map((product) => (
                   <tr
                     key={product.id}
                     className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50"
@@ -410,8 +488,8 @@ export default function ProductsPage() {
                     <td className="py-3 px-4">
                       <input
                         type="checkbox"
-                        checked={selectedProducts.includes(product.id)}
-                        onChange={(e) => handleSelectProduct(product.id, e.target.checked)}
+                        checked={selectedProducts.includes(String(product.id))}
+                        onChange={(e) => handleSelectProduct(String(product.id), e.target.checked)}
                         className="rounded"
                       />
                     </td>
@@ -437,7 +515,7 @@ export default function ProductsPage() {
                       <span className="text-black dark:text-white font-medium">{product.name}</span>
                     </td>
                     <td className="py-3 px-4">
-                      <span className="text-gray-600 dark:text-gray-400">{product.category}</span>
+                      <span className="text-gray-600 dark:text-gray-400">{product.category_name}</span>
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span className="font-medium text-black dark:text-white">{formatPrice(product.price)}</span>
@@ -447,7 +525,7 @@ export default function ProductsPage() {
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span className={`font-medium ${product.lowStock ? 'text-red-600 dark:text-red-400' : 'text-black dark:text-white'}`}>
-                        {product.stock}
+                        {product.stock ?? 'N/A'}
                       </span>
                       {product.lowStock && (
                         <div className="w-2 h-2 bg-red-500 rounded-full mt-1 mx-auto"></div>
@@ -458,7 +536,7 @@ export default function ProductsPage() {
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span className="text-green-600 dark:text-green-400 font-medium">
-                        {product.margin.toFixed(1)}%
+                        {product.cost > 0 ? (((product.price - product.cost) / product.cost) * 100).toFixed(1) : 0}%
                       </span>
                     </td>
                     <td className="py-3 px-4">
@@ -492,7 +570,14 @@ export default function ProductsPage() {
             </table>
           </div>
 
-          {filteredProducts.length === 0 && (
+          {isLoading && (
+            <div className="text-center py-8">
+              <i className="ri-loader-4-line animate-spin text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+              <p className="text-gray-500 dark:text-gray-400">Cargando productos...</p>
+            </div>
+          )}
+
+          {!isLoading && products.length === 0 && (
             <div className="text-center py-8">
               <i className="ri-box-3-line text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
               <p className="text-gray-500 dark:text-gray-400">No se encontraron productos</p>
@@ -513,27 +598,21 @@ export default function ProductsPage() {
       {/* Modal de producto */}
       {showProductModal && (
         <ProductModal
-          product={editingProduct}
+          // --- 11. MAPEAR DATOS AL MODAL ---
+          product={editingProduct ? {
+            ...editingProduct,
+            categoryId: editingProduct.category_id,
+            subcategoryId: editingProduct.subcategory_id,
+            taxRate: editingProduct.vat_percent,
+            status: editingProduct.status,
+            stock: editingProduct.stock ?? 0, 
+            margin: editingProduct.cost > 0 ? (((editingProduct.price - editingProduct.cost) / editingProduct.cost) * 100) : 0,
+          } : null}
           onClose={() => {
             setShowProductModal(false);
             setEditingProduct(null);
           }}
-          onSave={(productData) => {
-            if (editingProduct) {
-              setProducts(products.map(p => 
-                p.id === editingProduct.id ? { ...p, ...productData } : p
-              ));
-            } else {
-              const newProduct = {
-                ...productData,
-                id: Date.now().toString(),
-                lowStock: productData.stock <= (productData.minStock || 10) // <-- Lógica mejorada
-              };
-              setProducts([...products, newProduct as Product]);
-            }
-            setShowProductModal(false);
-            setEditingProduct(null);
-          }}
+          onSave={handleSaveProduct} // <-- Conectado a la API
         />
       )}
 
@@ -541,14 +620,17 @@ export default function ProductsPage() {
       {showImportModal && (
         <ImportCSVModal
           onClose={() => setShowImportModal(false)}
-          onImport={handleImportProducts}
+          // @ts-ignore
+          onImport={handleImportProducts} // <-- Conectado a la API
+          onDownloadTemplate={handleDownloadTemplate} // <-- Conectado a la API
         />
       )}
 
       {/* Modal de impresión de etiquetas */}
       {showLabelModal && (
         <LabelPrintModal
-          selectedProducts={products.filter(p => selectedProducts.includes(p.id))}
+          // @ts-ignore
+          selectedProducts={products.filter(p => selectedProducts.includes(String(p.id)))}
           onClose={() => setShowLabelModal(false)}
           onPrint={handleLabelPrint}
         />
@@ -559,7 +641,7 @@ export default function ProductsPage() {
         <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
           toast.type === 'success' ? 'bg-green-500 text-white' :
           toast.type === 'error' ? 'bg-red-500 text-white' :
-          'bg-blue-500 text-white' // Corregido: 'bg-blue-5 00' a 'bg-blue-500'
+          'bg-blue-500 text-white'
         }`}>
           <div className="flex items-center space-x-2">
             <i className={`${
