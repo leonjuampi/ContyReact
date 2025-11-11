@@ -1,77 +1,19 @@
-
-import { useState } from 'react';
+// src/pages/stock/components/MovementsTab.tsx
+import { useState, useEffect } from 'react';
 import Card from '../../../components/base/Card';
 import Button from '../../../components/base/Button';
-
-interface StockMovement {
-  id: string;
-  date: string;
-  time: string;
-  type: 'entrada' | 'salida' | 'ajuste' | 'venta';
-  product: {
-    name: string;
-    sku: string;
-  };
-  quantity: number;
-  warehouse: string;
-  user: string;
-  reference?: string;
-  notes?: string;
-}
-
-const mockMovements: StockMovement[] = [
-  {
-    id: '1',
-    date: '2024-01-22',
-    time: '14:30',
-    type: 'venta',
-    product: { name: 'Camisa Manga Larga Blanca', sku: 'CAM001' },
-    quantity: -2,
-    warehouse: 'Depósito Central',
-    user: 'Juan Pérez',
-    reference: 'V-0001',
-    notes: 'Venta presencial'
-  },
-  {
-    id: '2',
-    date: '2024-01-22',
-    time: '10:15',
-    type: 'entrada',
-    product: { name: 'Pantalón Jean Azul Classic', sku: 'PAN002' },
-    quantity: 50,
-    warehouse: 'Depósito Central',
-    user: 'María Silva',
-    reference: 'C-0045',
-    notes: 'Compra a proveedor'
-  },
-  {
-    id: '3',
-    date: '2024-01-21',
-    time: '16:45',
-    type: 'ajuste',
-    product: { name: 'Zapatillas Deportivas Negras', sku: 'ZAP003' },
-    quantity: -3,
-    warehouse: 'Sucursal Norte',
-    user: 'Carlos López',
-    reference: 'AJ-001',
-    notes: 'Productos dañados'
-  },
-  {
-    id: '4',
-    date: '2024-01-21',
-    time: '09:20',
-    type: 'salida',
-    product: { name: 'Buzo Canguro Gris', sku: 'BUZ004' },
-    quantity: -10,
-    warehouse: 'Depósito Central',
-    user: 'Ana Torres',
-    reference: 'T-002',
-    notes: 'Transferencia a sucursal'
-  }
-];
+// --- 1. Importar la API y la nueva interfaz ---
+import { StockMovement, getStockMovements, MovementFilters } from '../../../services/stock.api';
 
 export default function MovementsTab() {
-  const [movements, setMovements] = useState<StockMovement[]>(mockMovements);
+  // --- 3. Añadir estados para datos, carga y total ---
+  const [movements, setMovements] = useState<StockMovement[]>([]); // Inicia vacío
+  const [isLoading, setIsLoading] = useState(true);
+  const [totalMovements, setTotalMovements] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(50); // Coincide con el default del backend
+
+  // Estados de filtros (sin cambios)
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedType, setSelectedType] = useState('all');
@@ -79,42 +21,87 @@ export default function MovementsTab() {
   const [productFilter, setProductFilter] = useState('');
   const [showNewMovementModal, setShowNewMovementModal] = useState(false);
 
-  const filteredMovements = movements.filter(movement => {
-    if (dateFrom && movement.date < dateFrom) return false;
-    if (dateTo && movement.date > dateTo) return false;
-    if (selectedType !== 'all' && movement.type !== selectedType) return false;
-    if (selectedWarehouse !== 'all' && movement.warehouse !== selectedWarehouse) return false;
-    if (productFilter && !movement.product.name.toLowerCase().includes(productFilter.toLowerCase()) && 
-        !movement.product.sku.toLowerCase().includes(productFilter.toLowerCase())) return false;
-    return true;
-  });
+  // --- 4. Función para cargar datos ---
+  const fetchMovements = () => {
+    setIsLoading(true);
+    
+    // Mapear el ID del warehouse (string) a un ID numérico (number)
+    // Esto es una suposición. Necesitarías un estado que mapee "Depósito Central" a 1, etc.
+    // Por ahora, lo dejamos simple.
+    const branchIdMap: Record<string, number> = {
+      'Depósito Central': 1,
+      'Sucursal Norte': 2,
+      'Sucursal Sur': 3
+    };
 
+    const filters: MovementFilters = {
+      from: dateFrom || undefined,
+      to: dateTo || undefined,
+      type: selectedType !== 'all' ? (selectedType.toUpperCase() as MovementFilters['type']) : undefined,
+      branchId: selectedWarehouse !== 'all' ? branchIdMap[selectedWarehouse] : undefined,
+      q: productFilter || undefined,
+      limit: pageSize,
+      offset: (currentPage - 1) * pageSize,
+    };
+
+    getStockMovements(filters)
+      .then(data => {
+        setMovements(data.items);
+        setTotalMovements(data.total);
+      })
+      .catch(err => {
+        console.error("Error fetching movements:", err);
+        // Aquí deberías mostrar un toast de error
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  };
+
+  // --- 5. useEffect para cargar datos cuando cambian los filtros ---
+  useEffect(() => {
+    // Usamos un debounce para no llamar a la API en cada tecla del filtro de producto
+    const timer = setTimeout(() => {
+      fetchMovements();
+    }, 300); 
+
+    return () => clearTimeout(timer);
+  }, [dateFrom, dateTo, selectedType, selectedWarehouse, productFilter, currentPage]);
+
+
+  // (Funciones getMovementTypeIcon, getMovementTypeColor, getMovementTypeLabel no cambian)
   const getMovementTypeIcon = (type: string) => {
     const icons = {
-      entrada: 'ri-arrow-down-line',
-      salida: 'ri-arrow-up-line',
-      ajuste: 'ri-edit-line',
-      venta: 'ri-shopping-cart-line'
+      ENTRY: 'ri-arrow-down-line', // ENTRADA
+      TRANSFER_IN: 'ri-arrow-down-line',
+      SALE: 'ri-shopping-cart-line', // VENTA
+      ADJUSTMENT: 'ri-edit-line', // AJUSTE
+      TRANSFER_OUT: 'ri-arrow-up-line', // SALIDA
+      INVENTORY: 'ri-clipboard-line', // AÑADIDO
     };
     return icons[type as keyof typeof icons] || 'ri-exchange-line';
   };
 
   const getMovementTypeColor = (type: string) => {
     const colors = {
-      entrada: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20',
-      salida: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/20',
-      ajuste: 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/20',
-      venta: 'text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/20'
+      ENTRY: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20',
+      TRANSFER_IN: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20',
+      SALE: 'text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/20',
+      ADJUSTMENT: 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/20',
+      TRANSFER_OUT: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/20',
+      INVENTORY: 'text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/20', // AÑADIDO
     };
     return colors[type as keyof typeof colors] || 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800';
   };
-
+  
   const getMovementTypeLabel = (type: string) => {
     const labels = {
-      entrada: 'Entrada',
-      salida: 'Salida',
-      ajuste: 'Ajuste',
-      venta: 'Venta'
+      ENTRY: 'Entrada',
+      TRANSFER_IN: 'Recepción',
+      SALE: 'Venta',
+      ADJUSTMENT: 'Ajuste',
+      TRANSFER_OUT: 'Salida (Transf.)',
+      INVENTORY: 'Inventario', // AÑADIDO
     };
     return labels[type as keyof typeof labels] || type;
   };
@@ -122,10 +109,11 @@ export default function MovementsTab() {
   const handleNewMovement = () => {
     setShowNewMovementModal(true);
   };
-
+  
+  // --- 6. Actualizar JSX de la tabla ---
   return (
     <div className="space-y-6">
-      {/* Filtros */}
+      {/* Filtros (Tu JSX va aquí) */}
       <Card>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-black dark:text-white">Filtros</h3>
@@ -164,10 +152,12 @@ export default function MovementsTab() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white text-sm pr-8"
             >
               <option value="all">Todos</option>
-              <option value="entrada">Entrada</option>
-              <option value="salida">Salida</option>
-              <option value="ajuste">Ajuste</option>
-              <option value="venta">Venta</option>
+              <option value="ENTRY">Entrada</option>
+              <option value="SALE">Venta</option>
+              <option value="ADJUSTMENT">Ajuste</option>
+              <option value="TRANSFER_IN">Recepción</option>
+              <option value="TRANSFER_OUT">Salida (Transf.)</option>
+              <option value="INVENTORY">Inventario</option>
             </select>
           </div>
 
@@ -215,7 +205,8 @@ export default function MovementsTab() {
               </tr>
             </thead>
             <tbody>
-              {filteredMovements.map((movement) => (
+              {/* --- 7. Adaptar el map a la nueva data --- */}
+              {movements.map((movement) => (
                 <tr
                   key={movement.id}
                   className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50"
@@ -223,9 +214,11 @@ export default function MovementsTab() {
                   <td className="py-3 px-4">
                     <div>
                       <p className="text-sm font-medium text-black dark:text-white">
-                        {new Date(movement.date).toLocaleDateString('es-AR')}
+                        {new Date(movement.createdAt).toLocaleDateString('es-AR')}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{movement.time}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {new Date(movement.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
                   </td>
                   <td className="py-3 px-4">
@@ -236,8 +229,11 @@ export default function MovementsTab() {
                   </td>
                   <td className="py-3 px-4">
                     <div>
-                      <p className="text-sm font-medium text-black dark:text-white">{movement.product.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">SKU: {movement.product.sku}</p>
+                      {/* Usar los campos de la API */}
+                      <p className="text-sm font-medium text-black dark:text-white">{movement.productName}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        SKU: {movement.variantSku || movement.productSku} {movement.variantName && `(${movement.variantName})`}
+                      </p>
                     </div>
                   </td>
                   <td className="py-3 px-4 text-center">
@@ -250,19 +246,19 @@ export default function MovementsTab() {
                     </span>
                   </td>
                   <td className="py-3 px-4">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">{movement.warehouse}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">{movement.branchName}</span>
                   </td>
                   <td className="py-3 px-4">
-                    <span className="text-sm text-black dark:text-white">{movement.user}</span>
+                    <span className="text-sm text-black dark:text-white">{movement.userName || 'Sistema'}</span>
                   </td>
                   <td className="py-3 px-4">
-                    {movement.reference && (
-                      <span className="text-sm font-mono text-black dark:text-white">{movement.reference}</span>
+                    {movement.refCode && (
+                      <span className="text-sm font-mono text-black dark:text-white">{movement.refCode}</span>
                     )}
                   </td>
                   <td className="py-3 px-4">
-                    {movement.notes && (
-                      <span className="text-sm text-gray-600 dark:text-gray-400">{movement.notes}</span>
+                    {movement.note && (
+                      <span className="text-sm text-gray-600 dark:text-gray-400">{movement.note}</span>
                     )}
                   </td>
                 </tr>
@@ -271,16 +267,27 @@ export default function MovementsTab() {
           </table>
         </div>
 
-        {filteredMovements.length === 0 && (
+        {/* --- 8. Añadir estados de Carga y Vacío --- */}
+        {isLoading && (
+          <div className="text-center py-8">
+            <i className="ri-loader-4-line animate-spin text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+            <p className="text-gray-500 dark:text-gray-400">Cargando movimientos...</p>
+          </div>
+        )}
+
+        {!isLoading && movements.length === 0 && (
           <div className="text-center py-8">
             <i className="ri-exchange-line text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
-            <p className="text-gray-500 dark:text-gray-400">No se encontraron movimientos</p>
+            <p className="text-gray-500 dark:text-gray-400">No se encontraron movimientos con los filtros aplicados</p>
             <Button onClick={handleNewMovement} className="mt-4">
               Crear primer movimiento
             </Button>
           </div>
         )}
       </Card>
+      
+      {/* Paginación (Ejemplo simple) */}
+      {/* ... Aquí deberías añadir botones de paginación que actualicen 'currentPage' ... */}
 
       {/* Modal Nuevo Movimiento */}
       {showNewMovementModal && (
@@ -296,18 +303,20 @@ export default function MovementsTab() {
               </button>
             </div>
 
+            {/* Aquí conectarás este formulario al endpoint POST /api/stock/movements */}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-black dark:text-white mb-2">Tipo de movimiento</label>
                 <select className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8">
-                  <option value="entrada">Entrada</option>
-                  <option value="salida">Salida</option>
-                  <option value="ajuste">Ajuste</option>
+                  {/* CORREGIDO: Usar valores de la API */}
+                  <option value="ENTRY">Entrada</option>
+                  <option value="ADJUSTMENT">Ajuste</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-black dark:text-white mb-2">Producto</label>
+                {/* Este input debería usar la API searchStockProducts que creamos */}
                 <input
                   type="text"
                   placeholder="Buscar producto por nombre o SKU..."
@@ -328,6 +337,7 @@ export default function MovementsTab() {
 
                 <div>
                   <label className="block text-sm font-medium text-black dark:text-white mb-2">Depósito</label>
+                  {/* Este select debería poblarse desde el AuthContext */}
                   <select className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8">
                     <option value="Depósito Central">Depósito Central</option>
                     <option value="Sucursal Norte">Sucursal Norte</option>

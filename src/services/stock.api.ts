@@ -1,8 +1,9 @@
 // src/services/stock.api.ts
 import { api } from './api';
 
-// --- INTERFACES BASADAS EN EL BACKEND ---
+// --- INTERFACES BASADAS EN TUS RUTAS (stock.routes.js y stock.controller.js) ---
 
+// Para: GET /api/stock/overview
 export interface StockOverview {
   lowStock: number;
   inventoryValue: number;
@@ -10,126 +11,66 @@ export interface StockOverview {
   noMovementDays: number;
 }
 
+// Para: GET /api/stock/movements
 export interface StockMovement {
   id: number;
   type: 'ENTRY' | 'SALE' | 'ADJUSTMENT' | 'TRANSFER_OUT' | 'TRANSFER_IN' | 'INVENTORY';
   branchId: number;
-  refCode: string;
-  note: string;
+  refCode: string | null;
+  note: string | null;
   createdAt: string;
   branchName: string;
-  userName: string;
+  userName: string | null;
   variantId: number;
-  variantName: string;
+  variantName: string | null;
   productId: number;
   productName: string;
   productSku: string;
-  quantity: number;
+  quantity: number; // Será negativo para salidas/ventas
 }
 
-export interface MovementListResponse {
-  items: StockMovement[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-export interface MovementCreatePayload {
-  type: 'ENTRY' | 'SALE' | 'ADJUSTMENT';
-  variantId: number;
-  quantity: number;
-  branchId: number;
-  refCode?: string;
-  note?: string;
-}
-
+// Para: GET /api/stock/transfers
 export interface StockTransfer {
   ref: string;
-  status: 'IN_TRANSIT' | 'RECEIVED';
+  status: 'RECEIVED' | 'IN_TRANSIT';
   outId: number;
   inId: number | null;
-  originName: string;
+  originName: string | null;
   destName: string | null;
   items: number;
   lastDate: string;
 }
 
-export interface TransferCreatePayload {
-  originBranchId: number;
-  destBranchId: number;
-  transferRef?: string;
-  note?: string;
-  items: {
-    variant_id: number;
-    quantity: number;
-  }[];
-}
-
-export interface InventorySession {
-  id: number;
-  branchId: number;
-  branchName: string;
-  status: 'OPEN' | 'APPROVED' | 'CANCELLED';
-  onlyDifferences: boolean;
-  createdAt: string;
-}
-
-export interface InventorySessionItem {
-  id: number;
-  variantId: number;
-  expectedQty: number;
-  countedQty: number;
-  difference: number;
-  productName: string;
-  productSku: string;
-  variantName: string;
-}
-
-export interface InventorySessionDetail extends InventorySession {
-  items: InventorySessionItem[];
-}
-
-export interface InventoryCountPayload {
-  variantId: number;
-  countedQty: number;
-}
-
-export interface ProductStockSearchItem {
-  productId: number;
-  productName: string;
-  productSku: string;
-  variantId: number;
-  variantName: string;
-  variantSku: string;
-  qty: number;
+// Interfaz para los filtros de GET /api/stock/movements
+export interface MovementFilters {
+  from?: string;
+  to?: string;
+  type?: 'ENTRY' | 'SALE' | 'ADJUSTMENT' | 'TRANSFER_OUT' | 'TRANSFER_IN' | 'INVENTORY';
+  branchId?: number;
+  q?: string; // Búsqueda por producto/SKU
+  limit?: number;
+  offset?: number;
 }
 
 // --- FUNCIONES DE API ---
 
 /**
  * GET /api/stock/overview
- * Obtiene las métricas rápidas de stock.
+ * Obtiene los KPIs (Stock Bajo, Valor, Sin Movimiento)
  */
-export const getStockOverview = (branchId?: number, noMovementDays: number = 90): Promise<StockOverview> => {
+export const getStockOverview = (branchId?: number): Promise<StockOverview> => {
   const params = new URLSearchParams();
-  if (branchId) params.append('branchId', String(branchId));
-  params.append('noMovementDays', String(noMovementDays));
+  if (branchId) {
+    params.append('branchId', String(branchId));
+  }
   return api.get(`/api/stock/overview?${params.toString()}`);
 };
 
 /**
  * GET /api/stock/movements
- * Lista los movimientos de stock con filtros y paginación.
+ * Lista todos los movimientos de stock con filtros
  */
-export const listMovements = (filters: {
-  from?: string;
-  to?: string;
-  type?: string;
-  branchId?: number;
-  q?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<MovementListResponse> => {
+export const getStockMovements = (filters: MovementFilters): Promise<{ items: StockMovement[], total: number }> => {
   const params = new URLSearchParams();
   if (filters.from) params.append('from', filters.from);
   if (filters.to) params.append('to', filters.to);
@@ -143,100 +84,150 @@ export const listMovements = (filters: {
 };
 
 /**
- * POST /api/stock/movements
- * Crea un movimiento simple (Entrada/Ajuste).
- */
-export const createMovement = (payload: MovementCreatePayload): Promise<{ id: number }> => {
-  return api.post('/api/stock/movements', payload);
-};
-
-/**
  * GET /api/stock/transfers
- * Lista las transferencias.
+ * Lista todas las transferencias
  */
-export const listTransfers = (branchId?: number): Promise<{ items: StockTransfer[] }> => {
-  const params = new URLSearchParams();
-  if (branchId) params.append('branchId', String(branchId));
-  return api.get(`/api/stock/transfers?${params.toString()}`);
-};
-
-/**
- * POST /api/stock/transfers
- * Crea una nueva transferencia (genera el TRANSFER_OUT).
- */
-export const createTransfer = (payload: TransferCreatePayload): Promise<{ transfer_ref: string, out_id: number, destBranchId: number }> => {
-  return api.post('/api/stock/transfers', payload);
-};
-
-/**
- * POST /api/stock/transfers/:ref/receive
- * Recibe una transferencia pendiente (genera el TRANSFER_IN).
- */
-export const receiveTransfer = (transferRef: string, destBranchId: number): Promise<{ in_id: number }> => {
-  return api.post(`/api/stock/transfers/${transferRef}/receive`, { branchId: destBranchId });
-};
-
-/**
- * GET /api/stock/inventory/sessions
- * Lista las sesiones de inventario.
- */
-export const listInventorySessions = (filters: {
-  branchId?: number;
-  status?: 'OPEN' | 'APPROVED' | 'CANCELLED';
-}): Promise<{ items: InventorySession[] }> => {
-  const params = new URLSearchParams();
-  if (filters.branchId) params.append('branchId', String(filters.branchId));
-  if (filters.status) params.append('status', filters.status);
-  return api.get(`/api/stock/inventory/sessions?${params.toString()}`);
-};
-
-/**
- * POST /api/stock/inventory/sessions
- * Crea una nueva sesión de inventario.
- */
-export const createInventorySession = (branchId: number, onlyDifferences: boolean): Promise<{ id: number }> => {
-  return api.post('/api/stock/inventory/sessions', { branchId, onlyDifferences });
-};
-
-/**
- * GET /api/stock/inventory/sessions/:id
- * Obtiene el detalle de una sesión de inventario.
- */
-export const getInventorySession = (sessionId: number): Promise<InventorySessionDetail> => {
-  return api.get(`/api/stock/inventory/sessions/${sessionId}`);
-};
-
-/**
- * POST /api/stock/inventory/sessions/:id/count
- * Registra el conteo de un ítem.
- */
-export const countInventoryItem = (sessionId: number, payload: InventoryCountPayload): Promise<{ ok: boolean }> => {
-  return api.post(`/api/stock/inventory/sessions/${sessionId}/count`, payload);
-};
-
-/**
- * POST /api/stock/inventory/sessions/:id/approve
- * Aprueba una sesión y aplica los ajustes de stock.
- */
-export const approveInventorySession = (sessionId: number): Promise<{ ok: boolean, movementId: number | null }> => {
-  return api.post(`/api/stock/inventory/sessions/${sessionId}/approve`, {});
-};
-
-/**
- * POST /api/stock/inventory/sessions/:id/cancel
- * Cancela una sesión de inventario.
- */
-export const cancelInventorySession = (sessionId: number): Promise<{ ok: boolean }> => {
-  return api.post(`/api/stock/inventory/sessions/${sessionId}/cancel`, {});
+export const getStockTransfers = (branchId?: number): Promise<{ items: StockTransfer[] }> => {
+    const params = new URLSearchParams();
+    if (branchId) {
+      params.append('branchId', String(branchId));
+    }
+    return api.get(`/api/stock/transfers?${params.toString()}`);
 };
 
 /**
  * GET /api/stock/products
- * Busca productos/variantes para agregar a movimientos o transferencias.
+ * Busca productos con su stock para modales (como el de transferencias)
  */
-export const searchProductsForStock = (q: string, branchId?: number): Promise<{ items: ProductStockSearchItem[] }> => {
+export const searchStockProducts = (q: string, branchId?: number): Promise<{ items: any[] }> => {
+    const params = new URLSearchParams();
+    params.append('q', q);
+    if (branchId) {
+      params.append('branchId', String(branchId));
+    }
+    return api.get(`/api/stock/products?${params.toString()}`);
+};
+
+// ... Aquí puedes añadir las funciones para POST (crear movimiento, crear transferencia), etc.
+// --- (Añadir al final de src/services/stock.api.ts) ---
+
+// Para: POST /api/stock/transfers
+export interface TransferItemPayload {
+  variant_id: number; // Asegúrate que coincida con el backend
+  quantity: number;
+}
+
+export interface CreateTransferPayload {
+  originBranchId: number;
+  destBranchId: number;
+  items: TransferItemPayload[];
+  transferRef?: string;
+  note?: string;
+}
+
+/**
+ * POST /api/stock/transfers
+ * Crea una nueva transferencia (modo 1-paso, crea OUT e IN)
+ * Tu backend (stock.routes.js) usa /api/stock/transfers y llama a createTransfer (que usa createTransferOUT)
+ */
+export const createTransfer = (payload: CreateTransferPayload): Promise<any> => {
+  return api.post('/api/stock/transfers', payload);
+};
+
+/**
+ * POST /api/stock/transfers/{ref}/receive
+ * Recibe una transferencia pendiente (crea el IN)
+ */
+export const receiveTransfer = (ref: string, destBranchId: number): Promise<any> => {
+  // El backend espera el branchId en el body
+  return api.post(`/api/stock/transfers/${ref}/receive`, { branchId: destBranchId });
+};
+
+// --- (Añadir al final de src/services/stock.api.ts) ---
+
+// Para: GET /api/stock/inventory
+export interface InventorySession {
+  id: number;
+  status: 'DRAFT' | 'COMPLETED';
+  ref: string | null;
+  note: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  branchName: string;
+  userName: string;
+  itemsCount: number; // El backend lo devuelve como string, pero lo casteamos
+}
+
+// Para: POST /api/stock/inventory
+export interface CreateInventoryPayload {
+  branchId: number;
+  note?: string;
+  ref?: string;
+  // 'items' se añade en el backend (all products from branch)
+}
+
+// Para: GET /api/stock/inventory/:id
+export interface InventoryItemDetail {
+  id: number; // inventory_item_id
+  variantId: number;
+  productName: string;
+  variantName: string | null;
+  productSku: string;
+  variantSku: string | null;
+  expected: number;
+  counted: number | null; // Null si aún no se contó
+  diff: number | null; // Null si aún no se contó
+}
+
+export interface InventorySessionDetails {
+  id: number;
+  status: 'DRAFT' | 'COMPLETED';
+  ref: string | null;
+  note: string | null;
+  createdAt: string;
+  branchName: string;
+  userName: string;
+  items: InventoryItemDetail[];
+}
+
+/**
+ * GET /api/stock/inventory
+ * Lista todas las sesiones de inventario
+ */
+export const getInventorySessions = (branchId?: number): Promise<{ items: InventorySession[] }> => {
   const params = new URLSearchParams();
-  params.append('q', q);
-  if (branchId) params.append('branchId', String(branchId));
-  return api.get(`/api/stock/products?${params.toString()}`);
+  if (branchId) {
+    params.append('branchId', String(branchId));
+  }
+  return api.get(`/api/stock/inventory/sessions?${params.toString()}`);
+};
+
+/**
+ * POST /api/stock/inventory
+ * Crea una nueva sesión de inventario (en DRAFT)
+ */
+export const createInventorySession = (payload: CreateInventoryPayload): Promise<InventorySession> => {
+  return api.post('/api/stock/inventory/sessions', payload);
+};
+
+/**
+ * GET /api/stock/inventory/:id
+ * Obtiene el detalle de una sesión (con los items)
+ */
+export const getInventorySessionDetails = (sessionId: number): Promise<InventorySessionDetails> => {
+  return api.get(`/api/stock/inventory/sessions/${sessionId}`);
+};
+
+/**
+ * POST /api/stock/inventory/:id/count
+ * (Este endpoint es para el CONTEO item por item, que es un flujo más complejo)
+ * (Por ahora nos enfocaremos en Finalizar/Completar)
+ */
+
+/**
+ * POST /api/stock/inventory/:id/commit
+ * Finaliza una sesión de inventario y ajusta el stock.
+ */
+export const commitInventorySession = (sessionId: number): Promise<{ message: string }> => {
+  return api.post(`/api/stock/inventory/sessions/${sessionId}/commit`, {});
 };

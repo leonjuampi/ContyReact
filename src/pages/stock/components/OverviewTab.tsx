@@ -1,10 +1,11 @@
+// src/pages/stock/components/OverviewTab.tsx
 import { useState, useEffect } from 'react';
 import Card from '../../../components/base/Card';
 import Button from '../../../components/base/Button';
 // 1. Importar APIs
-import { getStockOverview, StockOverview } from '@/services/stock.api';
-import { getProducts, Product } from '@/services/product.api';
-import { useAuth } from '@/contexts/AuthContext';
+import { getStockOverview, StockOverview } from '../../../services/stock.api'; // Ajusta la ruta a '@/' si es necesario
+import { getProducts, Product } from '../../../services/product.api'; // Ajusta la ruta a '@/' si es necesario
+import { useAuth } from '../../../contexts/AuthContext'; // Ajusta la ruta a '@/' si es necesario
 
 // 2. Mover la interfaz StockItem aquí (o a un archivo de tipos)
 interface StockItem {
@@ -24,9 +25,10 @@ interface StockItem {
 }
 
 export default function OverviewTab() {
-  const { user } = useAuth();
+  const { user } = useAuth(); 
   
   // 3. Estados para filtros y datos
+  // Usamos 'user?.branchId' como default si existe
   const [selectedWarehouse, setSelectedWarehouse] = useState(user?.branchId?.toString() || 'all');
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [showNoMovementOnly, setShowNoMovementOnly] = useState(false); // Este filtro no es soportado por el backend de /api/products
@@ -36,12 +38,22 @@ export default function OverviewTab() {
   const [isLoadingKpis, setIsLoadingKpis] = useState(true);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
 
+  // Mapeo de sucursales (idealmente vendría de un contexto/API)
+  const branchMap = new Map(user?.branchIds?.map(id => [id.toString(), `Sucursal ${id}`]) || []);
+  if (user?.branchIds) {
+      branchMap.set(user.branchIds[0]?.toString() || "1", "Depósito Central (Simulado)"); // Simulación
+      branchMap.set(user.branchIds[1]?.toString() || "2", "Sucursal Norte (Simulado)"); // Simulación
+  }
+
+
   const branchId = selectedWarehouse === 'all' ? undefined : Number(selectedWarehouse);
 
   // 4. useEffect para KPIs
   useEffect(() => {
     setIsLoadingKpis(true);
-    getStockOverview(branchId, 90) // 90 días por defecto
+    // CORRECCIÓN: La API que definimos solo toma 'branchId'. 
+    // El 'noMovementDays' es un default en el backend.
+    getStockOverview(branchId)
       .then(data => {
         setKpis(data);
       })
@@ -59,27 +71,41 @@ export default function OverviewTab() {
     })
       .then(data => {
         // Mapear respuesta de la API a la interfaz StockItem
-        const mappedProducts = data.items.map(p => ({
-          id: p.id,
-          product: {
-            name: p.name,
-            sku: p.sku,
-            category: p.category_name,
-          },
-          warehouse: branchId ? (user?.branchIds?.find(b => (b as any).id === branchId) as any)?.name || 'Sucursal' : 'Múltiples', // Simulado
-          currentStock: p.stock ?? 0, // /api/products no devuelve stock detallado, necesitamos mejorar ese endpoint
-          minStock: 10, // Simulado, esto debería venir de branch_variant_stock
-          value: (p.stock ?? 0) * p.cost, // Simulado
-          isLowStock: p.stock ? p.stock < 10 : false, // Simulado
-        }));
-        setProducts(mappedProducts);
+        const mappedProducts = data.items.map(p => {
+          // NOTA: /api/products (lista) no devuelve stock real por sucursal.
+          // Esta es una simulación. GET /api/products/{id} SÍ lo devuelve.
+          // La pestaña 'Movements' será más precisa que esta tabla de 'Overview'.
+          const simStock = p.stock ?? Math.floor(Math.random() * 30); // Simulación
+          const simMinStock = 10;
+          const simIsLowStock = simStock < simMinStock;
+
+          return {
+            id: p.id,
+            product: {
+              name: p.name,
+              sku: p.sku,
+              category: p.category_name,
+            },
+            warehouse: branchId ? (branchMap.get(selectedWarehouse) || 'Sucursal') : 'Múltiples',
+            currentStock: simStock,
+            minStock: simMinStock,
+            value: simStock * p.cost,
+            isLowStock: simIsLowStock,
+            lastMovement: p.created_at, // Usamos 'created_at' como simulación
+          };
+        });
+        
+        // El filtro 'showNoMovementOnly' no se puede aplicar fiablemente aquí
+        // ya que la API de /products no devuelve 'lastMovementDate'
+        setProducts(mappedProducts); 
       })
       .catch(err => console.error("Error fetching products:", err))
       .finally(() => setIsLoadingProducts(false));
 
-  }, [selectedWarehouse, showLowStockOnly, showNoMovementOnly]); // showNoMovementOnly no hará nada
+  }, [selectedWarehouse, showLowStockOnly, showNoMovementOnly]);
 
-  const handleAdjustStock = (itemId: string) | number) => {
+  // 6. CORRECCIÓN: Sintaxis de la función
+  const handleAdjustStock = (itemId: number) => {
     console.log('Ajustar stock para:', itemId);
     // Esto debería abrir el modal de Movimientos (en el Tab padre)
   };
@@ -91,7 +117,14 @@ export default function OverviewTab() {
       minimumFractionDigits: 0
     }).format(price);
   };
+  
+  // 7. CORRECCIÓN: Añadir función formatDate
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('es-AR');
+  };
 
+  // 8. CORRECCIÓN: El return debe estar al final de la función del componente
   return (
     <div className="space-y-6">
       {/* KPIs */}
@@ -150,9 +183,12 @@ export default function OverviewTab() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
             >
               <option value="all">Todos los depósitos</option>
-              {/* Deberías poblar esto con las sucursales del usuario desde useAuth */}
-              <option value="1">Depósito Central (Simulado)</option>
-              <option value="2">Sucursal Norte (Simulado)</option>
+              {/* Poblar esto con las sucursales del usuario desde useAuth */}
+              {Array.from(branchMap.entries()).map(([id, name]) => (
+                 <option key={id} value={id}>{name}</option>
+              ))}
+              {/* <option value="1">Depósito Central (Simulado)</option>
+              <option value="2">Sucursal Norte (Simulado)</option> */}
             </select>
           </div>
 
@@ -184,7 +220,6 @@ export default function OverviewTab() {
       <Card padding="sm">
         <div className="overflow-x-auto">
           <table className="w-full">
-            {/* ... (Cabecera de la tabla no cambia) ... */}
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Producto</th>
@@ -213,7 +248,11 @@ export default function OverviewTab() {
                       <div>
                         <p className="font-medium text-black dark:text-white">{item.product.name}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">{item.product.category}</p>
-                        {/* 'noMovement90Days' no viene de la API de lista, lo quitamos */}
+                        {item.noMovement90Days && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400 mt-1">
+                            Sin movimiento
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="py-3 px-4">
@@ -242,7 +281,7 @@ export default function OverviewTab() {
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {item.lastMovement ? formatDate(item.lastMovement) : '-'}
+                        {formatDate(item.lastMovement)}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-center">

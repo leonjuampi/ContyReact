@@ -1,172 +1,162 @@
-
-import { useState, useRef, useEffect } from 'react';
+// src/pages/stock/components/InventoryTab.tsx
+import { useState, useEffect } from 'react';
 import Card from '../../../components/base/Card';
 import Button from '../../../components/base/Button';
+// --- 1. Importar API y Auth ---
+import {
+  InventorySession,
+  getInventorySessions,
+  createInventorySession,
+  getInventorySessionDetails,
+  commitInventorySession,
+  InventorySessionDetails,
+  CreateInventoryPayload
+} from '../../../services/stock.api';
+import { useAuth } from '../../../contexts/AuthContext';
 
-interface InventoryItem {
-  id: string;
-  product: {
-    name: string;
-    sku: string;
-    category: string;
-  };
-  expected: number;
-  counted: number;
-  difference: number;
-  warehouse: string;
-  status: 'pending' | 'counted' | 'approved';
-}
-
-const mockInventoryData: InventoryItem[] = [
-  {
-    id: '1',
-    product: { name: 'Camisa Manga Larga Blanca', sku: 'CAM001', category: 'Camisas' },
-    expected: 25,
-    counted: 23,
-    difference: -2,
-    warehouse: 'Depósito Central',
-    status: 'counted'
-  },
-  {
-    id: '2',
-    product: { name: 'Pantalón Jean Azul Classic', sku: 'PAN002', category: 'Pantalones' },
-    expected: 15,
-    counted: 15,
-    difference: 0,
-    warehouse: 'Depósito Central',
-    status: 'counted'
-  },
-  {
-    id: '3',
-    product: { name: 'Zapatillas Deportivas Negras', sku: 'ZAP003', category: 'Calzado' },
-    expected: 12,
-    counted: 0,
-    difference: 0,
-    warehouse: 'Depósito Central',
-    status: 'pending'
-  }
-];
+// --- 2. Eliminar Mocks ---
+// const mockInventoryData = [...]; // ELIMINADO
 
 export default function InventoryTab() {
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(mockInventoryData);
-  const [inventoryMode, setInventoryMode] = useState(false);
-  const [productInput, setProductInput] = useState('');
-  const [selectedWarehouse, setSelectedWarehouse] = useState('Depósito Central');
-  const [showOnlyDifferences, setShowOnlyDifferences] = useState(false);
+  const { user } = useAuth();
 
-  const productInputRef = useRef<HTMLInputElement>(null);
+  // --- 3. Estados ---
+  const [sessions, setSessions] = useState<InventorySession[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showNewInventoryModal, setShowNewInventoryModal] = useState(false);
+  const [showResultsModal, setShowResultsModal] = useState(false);
+
+  // Estados para el modal de "Nuevo"
+  const [newInventoryBranch, setNewInventoryBranch] = useState(user?.branchId?.toString() || '');
+  const [newInventoryNote, setNewInventoryNote] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Estados para el modal de "Resultados"
+  const [selectedSession, setSelectedSession] = useState<InventorySessionDetails | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+
+  // Toast (simulado)
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+
+  // --- 4. Mapa de Sucursales (simulado) ---
+  // Idealmente, esto viene del contexto de Auth con nombres
+  const branchMap = new Map<number, string>();
+  user?.branchIds?.forEach(id => {
+    branchMap.set(id, `Sucursal ${id} (Sim)`);
+  });
+  const branchOptions = Array.from(branchMap.entries()).map(([id, name]) => ({
+    id: id.toString(),
+    name: name
+  }));
+
+  // --- 5. Funciones de Carga ---
+  const fetchSessions = () => {
+    setIsLoading(true);
+    // Filtramos por la sucursal del usuario si no es admin
+    const branchId = user?.branchId; 
+    
+    getInventorySessions(branchId)
+      .then(data => {
+        setSessions(data.items);
+      })
+      .catch(err => {
+        console.error(err);
+        showToast('Error al cargar inventarios', 'error');
+      })
+      .finally(() => setIsLoading(false));
+  };
 
   useEffect(() => {
-    if (inventoryMode && productInputRef.current) {
-      productInputRef.current.focus();
-    }
-  }, [inventoryMode]);
+    fetchSessions();
+  }, []); // Cargar al montar
 
-  const filteredItems = inventoryItems.filter(item => {
-    if (selectedWarehouse !== 'all' && item.warehouse !== selectedWarehouse) return false;
-    if (showOnlyDifferences && item.difference === 0) return false;
-    return true;
-  });
-
-  const handleStartInventory = () => {
-    setInventoryMode(true);
-    // Reset conteos
-    setInventoryItems(items => items.map(item => ({
-      ...item,
-      counted: 0,
-      difference: 0,
-      status: 'pending'
-    })));
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
-  const handleProductScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const input = productInput.trim();
-      if (input) {
-        countProduct(input);
-        setProductInput('');
-      }
-    }
+  // --- 6. Lógica de Modales ---
+
+  const resetNewModal = () => {
+    setNewInventoryBranch(user?.branchId?.toString() || '');
+    setNewInventoryNote('');
+    setIsCreating(false);
+    setShowNewInventoryModal(false);
   };
 
-  const countProduct = (input: string) => {
-    const itemIndex = inventoryItems.findIndex(item => 
-      item.product.sku.toLowerCase() === input.toLowerCase() ||
-      item.product.name.toLowerCase().includes(input.toLowerCase())
-    );
-
-    if (itemIndex === -1) {
-      alert('Producto no encontrado en el inventario');
+  const handleCreateInventory = async () => {
+    const branchId = Number(newInventoryBranch);
+    if (!branchId) {
+      showToast('Seleccione una sucursal', 'error');
       return;
     }
+    
+    setIsCreating(true);
+    const payload: CreateInventoryPayload = {
+      branchId,
+      note: newInventoryNote || undefined
+    };
 
-    const newItems = [...inventoryItems];
-    newItems[itemIndex].counted += 1;
-    newItems[itemIndex].difference = newItems[itemIndex].counted - newItems[itemIndex].expected;
-    newItems[itemIndex].status = 'counted';
-    setInventoryItems(newItems);
+    try {
+      await createInventorySession(payload);
+      showToast('Sesión de inventario creada (Borrador)', 'success');
+      resetNewModal();
+      fetchSessions(); // Recargar lista
+    } catch (err: any) {
+      showToast(`Error: ${err.message}`, 'error');
+      setIsCreating(false);
+    }
   };
 
-  const updateManualCount = (itemId: string, count: number) => {
-    const newItems = inventoryItems.map(item => {
-      if (item.id === itemId) {
-        return {
-          ...item,
-          counted: Math.max(0, count),
-          difference: Math.max(0, count) - item.expected,
-          status: 'counted' as const
-        };
-      }
-      return item;
-    });
-    setInventoryItems(newItems);
+
+  const handleViewResults = async (session: InventorySession) => {
+    setIsLoadingDetails(true);
+    setShowResultsModal(true);
+    try {
+      const details = await getInventorySessionDetails(session.id);
+      setSelectedSession(details);
+    } catch (err: any) {
+      showToast(`Error al cargar detalles: ${err.message}`, 'error');
+      setShowResultsModal(false);
+    } finally {
+      setIsLoadingDetails(false);
+    }
   };
 
-  const approveAdjustment = (itemId: string) => {
-    const newItems = inventoryItems.map(item => {
-      if (item.id === itemId) {
-        return { ...item, status: 'approved' as const };
-      }
-      return item;
-    });
-    setInventoryItems(newItems);
+  const handleCommitInventory = async () => {
+    if (!selectedSession || selectedSession.status === 'COMPLETED') return;
+
+    if (!confirm(`¿Está seguro que desea finalizar este inventario? Esta acción ajustará permanentemente el stock. No se puede deshacer.`)) {
+      return;
+    }
+    
+    setIsCommitting(true);
+    try {
+      await commitInventorySession(selectedSession.id);
+      showToast('Inventario finalizado y stock ajustado', 'success');
+      setShowResultsModal(false);
+      setSelectedSession(null);
+      fetchSessions(); // Recargar lista
+    } catch (err: any) {
+      showToast(`Error al finalizar: ${err.message}`, 'error');
+    } finally {
+      setIsCommitting(false);
+    }
   };
 
-  const approveAllAdjustments = () => {
-    const newItems = inventoryItems.map(item => ({
-      ...item,
-      status: 'approved' as const
-    }));
-    setInventoryItems(newItems);
-    setInventoryMode(false);
-  };
 
-  const cancelInventory = () => {
-    setInventoryMode(false);
-    // Restaurar datos originales
-    setInventoryItems(mockInventoryData);
-  };
-
-  const getDifferenceColor = (difference: number) => {
-    if (difference > 0) return 'text-green-600 dark:text-green-400';
-    if (difference < 0) return 'text-red-600 dark:text-red-400';
-    return 'text-gray-600 dark:text-gray-400';
-  };
+  // --- 7. JSX ---
 
   const getStatusBadge = (status: string) => {
     const styles = {
-      pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
-      counted: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
-      approved: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+      DRAFT: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
+      COMPLETED: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
     };
-    
     const labels = {
-      pending: 'Pendiente',
-      counted: 'Contado',
-      approved: 'Aprobado'
+      DRAFT: 'Borrador',
+      COMPLETED: 'Finalizado'
     };
-
     return (
       <span className={`px-2 py-1 text-xs font-medium rounded-full ${styles[status as keyof typeof styles]}`}>
         {labels[status as keyof typeof labels]}
@@ -174,247 +164,261 @@ export default function InventoryTab() {
     );
   };
 
-  const pendingCount = inventoryItems.filter(item => item.status === 'pending').length;
-  const countedItems = inventoryItems.filter(item => item.status === 'counted').length;
-  const totalDifferences = inventoryItems.filter(item => item.difference !== 0).length;
-
   return (
     <div className="space-y-6">
-      {/* Estado del inventario */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Productos Pendientes</p>
-              <p className="text-2xl font-bold text-black dark:text-white">{pendingCount}</p>
-            </div>
-            <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center">
-              <i className="ri-time-line text-yellow-600 dark:text-yellow-400 text-xl"></i>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Productos Contados</p>
-              <p className="text-2xl font-bold text-black dark:text-white">{countedItems}</p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
-              <i className="ri-checkbox-line text-blue-600 dark:text-blue-400 text-xl"></i>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Con Diferencias</p>
-              <p className="text-2xl font-bold text-black dark:text-white">{totalDifferences}</p>
-            </div>
-            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center">
-              <i className="ri-error-warning-line text-red-600 dark:text-red-400 text-xl"></i>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Controles */}
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-4">
-            <div>
-              <label className="block text-sm font-medium text-black dark:text-white mb-2">Depósito</label>
-              <select
-                value={selectedWarehouse}
-                onChange={(e) => setSelectedWarehouse(e.target.value)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
-                disabled={inventoryMode}
-              >
-                <option value="all">Todos los depósitos</option>
-                <option value="Depósito Central">Depósito Central</option>
-                <option value="Sucursal Norte">Sucursal Norte</option>
-                <option value="Sucursal Sur">Sucursal Sur</option>
-              </select>
-            </div>
-
-            <label className="flex items-center gap-2 pt-7">
-              <input
-                type="checkbox"
-                checked={showOnlyDifferences}
-                onChange={(e) => setShowOnlyDifferences(e.target.checked)}
-                className="rounded"
-              />
-              <span className="text-sm text-black dark:text-white">Solo diferencias</span>
-            </label>
-          </div>
-
-          <div className="flex gap-3">
-            {!inventoryMode ? (
-              <Button onClick={handleStartInventory}>
-                <i className="ri-clipboard-line mr-2"></i>
-                Iniciar Inventario (I)
-              </Button>
-            ) : (
-              <>
-                <Button
-                  variant="secondary"
-                  onClick={cancelInventory}
-                >
-                  <i className="ri-close-line mr-2"></i>
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={approveAllAdjustments}
-                  disabled={pendingCount > 0}
-                >
-                  <i className="ri-check-double-line mr-2"></i>
-                  Aprobar Todo
-                </Button>
-              </>
-            )}
-          </div>
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-20 right-6 p-4 rounded-lg shadow-lg z-50 ${
+          toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
+          {toast.message}
         </div>
-
-        {/* Modo conteo */}
-        {inventoryMode && (
-          <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-            <div className="flex items-center mb-3">
-              <i className="ri-scan-line text-blue-600 dark:text-blue-400 text-xl mr-2"></i>
-              <h4 className="font-medium text-blue-900 dark:text-blue-100">Modo Conteo Activo</h4>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="flex-1">
-                <input
-                  ref={productInputRef}
-                  type="text"
-                  value={productInput}
-                  onChange={(e) => setProductInput(e.target.value)}
-                  onKeyDown={handleProductScan}
-                  placeholder="Escanear código de barras o escribir SKU..."
-                  className="w-full px-4 py-3 border border-blue-300 dark:border-blue-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white text-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  autoFocus
-                />
-              </div>
-              <div className="text-sm text-blue-600 dark:text-blue-400">
-                <p>Pendientes: <span className="font-bold">{pendingCount}</span></p>
-                <p>Contados: <span className="font-bold">{countedItems}</span></p>
-              </div>
-            </div>
+      )}
+      
+      {/* Header */}
+      <Card>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-black dark:text-white">Conteos de Inventario</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              Inicia y finaliza conteos para ajustar tu stock.
+            </p>
           </div>
-        )}
+          <Button onClick={() => setShowNewInventoryModal(true)}>
+            <i className="ri-add-line mr-2"></i>
+            Nuevo Inventario (I)
+          </Button>
+        </div>
       </Card>
 
-      {/* Tabla de inventario */}
+      {/* Lista de Sesiones */}
       <Card padding="sm">
-        <div className="overflow-x-auto">
+         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Producto</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">SKU</th>
-                <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Esperado</th>
-                <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Contado</th>
-                <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Diferencia</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Fecha</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Referencia/Nota</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Depósito</th>
                 <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Estado</th>
+                <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Ítems</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Usuario</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Finalizado</th>
                 <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {filteredItems.map((item) => (
-                <tr
-                  key={item.id}
-                  className={`border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50 ${
-                    item.difference !== 0 ? 'bg-yellow-50 dark:bg-yellow-900/10' : ''
-                  }`}
-                >
-                  <td className="py-3 px-4">
-                    <div>
-                      <p className="font-medium text-black dark:text-white">{item.product.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.product.category}</p>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="font-mono text-sm text-black dark:text-white">{item.product.sku}</span>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <span className="text-black dark:text-white font-medium">{item.expected}</span>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    {inventoryMode && item.status === 'pending' ? (
-                      <input
-                        type="number"
-                        value={item.counted}
-                        onChange={(e) => updateManualCount(item.id, parseInt(e.target.value) || 0)}
-                        className="w-16 text-center text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-black dark:text-white"
-                        min="0"
-                      />
-                    ) : (
-                      <span className="text-black dark:text-white font-medium">{item.counted}</span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`font-medium ${getDifferenceColor(item.difference)}`}>
-                      {item.difference > 0 ? '+' : ''}{item.difference}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-gray-600 dark:text-gray-400">{item.warehouse}</span>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    {getStatusBadge(item.status)}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    {item.status === 'counted' && item.difference !== 0 && (
-                      <Button
-                        size="sm"
-                        onClick={() => approveAdjustment(item.id)}
-                        disabled={item.status === 'approved'}
-                      >
-                        <i className="ri-check-line mr-1"></i>
-                        Aprobar
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {isLoading ? (
+                 <tr><td colSpan={8} className="text-center p-8 text-gray-500">Cargando...</td></tr>
+              ) : sessions.length === 0 ? (
+                 <tr><td colSpan={8} className="text-center p-8 text-gray-500">No se encontraron conteos.</td></tr>
+              ) : (
+                sessions.map((session) => (
+                  <tr
+                    key={session.id}
+                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50"
+                  >
+                    <td className="py-3 px-4">
+                      <span className="text-sm text-black dark:text-white">
+                         {new Date(session.createdAt).toLocaleDateString('es-AR')}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div>
+                        {session.ref && <p className="font-medium text-black dark:text-white">{session.ref}</p>}
+                        {session.note && <p className="text-xs text-gray-500">{session.note}</p>}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-sm text-black dark:text-white">{session.branchName}</span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {getStatusBadge(session.status)}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span className="text-sm text-black dark:text-white">{session.itemsCount}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                       <span className="text-sm text-black dark:text-white">{session.userName}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-sm text-black dark:text-white">
+                        {session.completedAt ? new Date(session.completedAt).toLocaleDateString('es-AR') : '-'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-center gap-2">
+                        {/* El botón de "Contar" abriría otra pantalla (flujo complejo) */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {/* TODO: Ir a la página de conteo */} }
+                          disabled={session.status === 'COMPLETED'}
+                        >
+                          <i className="ri-play-line mr-1"></i>
+                          {session.status === 'DRAFT' ? 'Contar' : 'Recontar'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewResults(session)}
+                        >
+                          <i className="ri-eye-line mr-1"></i>
+                          Resultados
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
-
-        {filteredItems.length === 0 && (
-          <div className="text-center py-8">
-            <i className="ri-clipboard-line text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
-            <p className="text-gray-500 dark:text-gray-400">No hay productos para mostrar</p>
-          </div>
-        )}
       </Card>
 
-      {/* Resumen de diferencias */}
-      {totalDifferences > 0 && (
-        <Card>
-          <h3 className="text-lg font-semibold text-black dark:text-white mb-4">Resumen de Ajustes</h3>
-          <div className="space-y-2">
-            {inventoryItems.filter(item => item.difference !== 0).map(item => (
-              <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <div>
-                  <p className="font-medium text-black dark:text-white">{item.product.name}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">SKU: {item.product.sku}</p>
-                </div>
-                <div className="text-right">
-                  <p className={`font-medium ${getDifferenceColor(item.difference)}`}>
-                    {item.difference > 0 ? 'Sobrante: +' : 'Faltante: '}{Math.abs(item.difference)}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {item.expected} → {item.counted}
-                  </p>
-                </div>
+      {/* Modal Nuevo Inventario */}
+      {showNewInventoryModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-6 w-full max-w-lg">
+            <h3 className="text-lg font-semibold text-black dark:text-white mb-4">Iniciar Conteo de Inventario</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-black dark:text-white mb-2">
+                  Depósito a inventariar *
+                </label>
+                <select
+                  value={newInventoryBranch}
+                  onChange={(e) => setNewInventoryBranch(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white pr-8"
+                >
+                  <option value="">Seleccionar depósito</option>
+                  {branchOptions.map(opt => (
+                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                  ))}
+                </select>
               </div>
-            ))}
+              <div>
+                <label className="block text-sm font-medium text-black dark:text-white mb-2">
+                  Referencia o Nota (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={newInventoryNote}
+                  onChange={(e) => setNewInventoryNote(e.target.value)}
+                  placeholder="Ej: Conteo fin de mes"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-black dark:text-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <Button variant="outline" onClick={resetNewModal} disabled={isCreating}>
+                Cancelar
+              </Button>
+              <Button onClick={handleCreateInventory} disabled={isCreating || !newInventoryBranch}>
+                {isCreating ? 'Iniciando...' : 'Iniciar Conteo'}
+              </Button>
+            </div>
           </div>
-        </Card>
+        </div>
       )}
+
+      {/* Modal Resultados */}
+      {showResultsModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-black dark:text-white">
+                Resultados del Inventario {selectedSession ? `(${selectedSession.branchName})` : ''}
+              </h3>
+              <button
+                onClick={() => setShowResultsModal(false)}
+                className="text-gray-500 hover:text-black dark:hover:text-white cursor-pointer"
+              >
+                <i className="ri-close-line text-xl"></i>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {isLoadingDetails ? (
+                <div className="text-center py-8">
+                  <i className="ri-loader-4-line animate-spin text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+                  <p className="text-gray-500 dark:text-gray-400">Cargando detalles...</p>
+                </div>
+              ) : !selectedSession ? (
+                <div className="text-center py-8">Error al cargar datos.</div>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                     <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Producto</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">SKU</th>
+                      <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Esperado</th>
+                      <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Contado</th>
+                      <th className="text-center py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Diferencia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedSession.items.map(item => {
+                      const diff = item.diff ?? 0; // (item.counted ?? 0) - item.expected;
+                      const rowColor = diff !== 0 ? 'bg-red-50 dark:bg-red-900/10' : '';
+                      const diffColor = diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-600' : '';
+                      
+                      return (
+                        <tr key={item.id} className={`border-b border-gray-100 dark:border-gray-800 ${rowColor}`}>
+                          <td className="py-3 px-4 text-sm text-black dark:text-white">
+                            {item.productName} {item.variantName && `(${item.variantName})`}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400 font-mono">
+                            {item.variantSku || item.productSku}
+                          </td>
+                          <td className="py-3 px-4 text-center text-sm text-black dark:text-white">
+                            {item.expected}
+                          </td>
+                          <td className="py-3 px-4 text-center text-sm text-black dark:text-white font-medium">
+                            {item.counted ?? <span className="text-gray-400">Sin contar</span>}
+                          </td>
+                          <td className={`py-3 px-4 text-center text-sm font-medium ${diffColor}`}>
+                            {diff > 0 ? `+${diff}` : (diff < 0 ? diff : '-')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="flex justify-between items-center p-6 border-t border-gray-200 dark:border-gray-700">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {selectedSession?.status === 'DRAFT' 
+                  ? 'Revisa las diferencias antes de finalizar.'
+                  : 'Este inventario ya fue finalizado.'
+                }
+              </p>
+              <div>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowResultsModal(false)}
+                  className="mr-3"
+                  disabled={isCommitting}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  variant="danger" // Asumimos que tienes un 'danger' o 'primary' fuerte
+                  onClick={handleCommitInventory}
+                  disabled={isCommitting || selectedSession?.status === 'COMPLETED'}
+                >
+                  {isCommitting ? 'Finalizando...' : 
+                   selectedSession?.status === 'COMPLETED' ? 'Finalizado' : 'Finalizar y Ajustar Stock'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
