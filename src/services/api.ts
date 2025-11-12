@@ -43,6 +43,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 // Nuestros métodos de API
 export const api = {
   get: async (url: string, options: RequestInit = {}) => {
+    options.cache = 'no-store';
     const response = await fetchWithAuth(url, { ...options, method: 'GET' });
     return handleResponse(response);
   },
